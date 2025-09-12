@@ -3,7 +3,7 @@ services:
     name: neethi-ai
     env: python
     plan: starter
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
     startCommand: python neethi.py
     envVars:
       - key: FLASK_ENV
