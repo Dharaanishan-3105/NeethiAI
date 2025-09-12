@@ -1,9 +1,3 @@
-# Virtual Environment
-neethi_env/
-venv/
-env/
-.env
-
 # Python
 __pycache__/
 *.py[cod]
@@ -25,6 +19,22 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
+
+# Virtual Environment
+neethi_env/
+venv/
+env/
+ENV/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Database
+*.db
+*.sqlite3
 
 # IDE
 .vscode/
@@ -46,23 +56,16 @@ Thumbs.db
 *.log
 logs/
 
-# Database
-*.db
-*.sqlite3
-
 # Temporary files
-*.tmp
-*.temp
 temp/
 tmp/
+*.tmp
 
-# EasyOCR models (will be downloaded on Railway)
+# EasyOCR models (will be downloaded on first run)
 easyocr_models/
 
-# Environment variables
-.env
-.env.local
-.env.production
+# Uploads (if any)
+uploads/
 
-# Railway
-.railway/
+# Cache
+.cache/

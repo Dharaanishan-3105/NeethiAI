@@ -9,15 +9,21 @@
         <div class="row align-items-center">
             <div class="col-lg-6">
                 <div class="hero-content">
-                    <h1 class="display-4 fw-bold text-gradient mb-4">
-                        NeethiAI
-                        <span class="tamil-text d-block" style="font-size: 0.7em; color: #666;">
-                            உங்கள் சட்ட AI உதவியாளர்
-                        </span>
-                    </h1>
+                    <div class="d-flex align-items-center mb-4">
+                        <img src="{{ url_for('static', filename='icons/Logo.png') }}" alt="NeethiAI Logo" width="80" height="80" class="me-3">
+                        <div>
+                            <h1 class="display-4 fw-bold text-gradient mb-0">
+                                NeethiAI
+                                <span class="tamil-text d-block" style="font-size: 0.7em; color: #666;">
+                                    உங்கள் சட்ட AI உதவியாளர்
+                                </span>
+                            </h1>
+                        </div>
+                    </div>
                     <p class="lead mb-4">
                         Your comprehensive legal AI companion for Indian citizens. Get instant legal guidance, 
                         document analysis, and fraud protection with trusted government sources.
+                        <br><small class="text-muted">Visit: <strong>neethiai.com</strong></small>
                     </p>
                     <div class="hero-buttons">
                         <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg me-3">

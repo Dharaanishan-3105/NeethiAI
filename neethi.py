@@ -21,6 +21,10 @@ import PyPDF2
 import docx
 import easyocr
 from PIL import Image, ImageFile
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 # Pillow compatibility shim for deprecated resampling constants used by dependencies (e.g., EasyOCR)
 try:
     # Pillow >= 10 removed these aliases; map to Resampling equivalents
@@ -49,12 +53,24 @@ import base64
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
-# PostgreSQL configuration - Railway will provide DATABASE_URL
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://neethi_user:HariDharaan%402025@localhost/neethi_ai')
+
+# Database configuration - use Render's DATABASE_URL if available
+database_url = os.getenv('DATABASE_URL')
+if database_url:
+    # Render provides DATABASE_URL, use it directly
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    print(f"🔗 Using production database: {database_url[:50]}...")
+else:
+    # Local development fallback
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://neethi_user:HariDharaan%402025@localhost/neethi_ai'
+    print("🔗 Using local development database")
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Limit uploads to 10 MB to prevent crashes
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', 10 * 1024 * 1024))
 
 # Initialize extensions
 db = SQLAlchemy(app)
@@ -988,10 +1004,6 @@ def index():
         return redirect(url_for('dashboard'))
     return render_template('index.html')
 
-@app.route('/manifest.json')
-def manifest():
-    return app.send_static_file('manifest.json')
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -1498,10 +1510,20 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         
-    print("🚀 Starting NeethiAI Flask Application...")
-    print("📱 Open your browser and go to: http://localhost:5000")
-    
-    # Run app - Railway will set PORT environment variable
+    # Get port from environment variable (Render sets this)
     port = int(os.getenv('PORT', 5000))
-    app.run(debug=False, host='0.0.0.0', port=port, use_reloader=False)
+    
+    # Check if running in production
+    is_production = os.getenv('FLASK_ENV') == 'production'
+    
+    if is_production:
+        print("🚀 Starting NeethiAI in Production Mode...")
+        # Use gunicorn for production
+        from gunicorn.app.wsgiapp import WSGIApplication
+        WSGIApplication().run()
+    else:
+        print("🚀 Starting NeethiAI Flask Application...")
+        print("📱 Open your browser and go to: http://localhost:5000")
+        # Run without auto-reloader to avoid upload interruptions
+        app.run(debug=False, host='0.0.0.0', port=port, use_reloader=False)
 
