@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block title %}Profile - NeethiAI{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card border-0 shadow-custom">
+                <div class="card-header bg-white border-bottom">
+                    <h4 class="mb-0">
+                        <i class="fas fa-user-cog me-2"></i>User Profile
+                    </h4>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row">
+                        <div class="col-md-4 text-center mb-4">
+                            <div class="profile-avatar mb-3">
+                                <i class="fas fa-user-circle text-primary" style="font-size: 5rem;"></i>
+                            </div>
+                            <h5>{{ current_user.name }}</h5>
+                            <p class="text-muted">{{ current_user.email }}</p>
+                        </div>
+                        
+                        <div class="col-md-8">
+                            <form>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="name" class="form-label">Full Name</label>
+                                        <input type="text" class="form-control" id="name" value="{{ current_user.name }}" readonly>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="email" class="form-label">Email Address</label>
+                                        <input type="email" class="form-control" id="email" value="{{ current_user.email }}" readonly>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="created_at" class="form-label">Member Since</label>
+                                        <input type="text" class="form-control" id="created_at" 
+                                               value="{{ current_user.created_at.strftime('%B %d, %Y') }}" readonly>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="last_login" class="form-label">Last Login</label>
+                                        <input type="text" class="form-control" id="last_login" 
+                                               value="{{ current_user.last_login.strftime('%B %d, %Y at %I:%M %p') if current_user.last_login else 'First time' }}" readonly>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="total_chats" class="form-label">Total Conversations</label>
+                                        <input type="text" class="form-control" id="total_chats" 
+                                               value="{{ current_user.chats|length }}" readonly>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="status" class="form-label">Account Status</label>
+                                        <input type="text" class="form-control" id="status" 
+                                               value="{% if current_user.is_active %}Active{% else %}Inactive{% endif %}" readonly>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Account Actions -->
+            <div class="card border-0 shadow-custom mt-4">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cog me-2"></i>Account Settings
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Security</h6>
+                            <p class="text-muted">Manage your account security settings</p>
+                            <button class="btn btn-outline-primary" onclick="changePassword()">
+                                <i class="fas fa-key me-2"></i>Change Password
+                            </button>
+                            <div id="pwForm" class="mt-3" style="display:none;">
+                                <div class="mb-2">
+                                    <input type="password" id="currentPw" class="form-control" placeholder="Current password">
+                                </div>
+                                <div class="mb-2">
+                                    <input type="password" id="newPw" class="form-control" placeholder="New password">
+                                </div>
+                                <button class="btn btn-sm btn-primary" onclick="submitPasswordChange()">Update Password</button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Data & Privacy</h6>
+                            <p class="text-muted">Control your data and privacy settings</p>
+                            <button class="btn btn-outline-secondary" onclick="exportData()">
+                                <i class="fas fa-download me-2"></i>Export Data
+                            </button>
+                            <button class="btn btn-outline-danger ms-2" onclick="clearHistory()">
+                                <i class="fas fa-trash me-2"></i>Clear History
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat Statistics -->
+            <div class="card border-0 shadow-custom mt-4">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-pie me-2"></i>Chat Statistics
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <div class="stat-item">
+                                <h3 class="text-primary">{{ current_user.chats|length }}</h3>
+                                <p class="text-muted mb-0">Total Chats</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-item">
+                                <h3 class="text-success">{{ (current_user.chats|selectattr('language', 'equalto', 'ta')|list)|length }}</h3>
+                                <p class="text-muted mb-0">Tamil Chats</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-item">
+                                <h3 class="text-info">{{ (current_user.chats|selectattr('language', 'equalto', 'en')|list)|length }}</h3>
+                                <p class="text-muted mb-0">English Chats</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-item">
+                                <h3 class="text-warning">{{ (current_user.chats|selectattr('feature_used', 'equalto', 'legal_qa')|list)|length }}</h3>
+                                <p class="text-muted mb-0">Legal Q&A</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Recent Activity -->
+            <div class="card border-0 shadow-custom mt-4">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0">
+                        <i class="fas fa-history me-2"></i>Recent Activity
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if current_user.chats %}
+                        <div class="timeline">
+                            {% for chat in current_user.chats[-5:] %}
+                            <div class="timeline-item">
+                                <div class="timeline-marker">
+                                    <i class="fas fa-comment"></i>
+                                </div>
+                                <div class="timeline-content">
+                                    <h6 class="mb-1">{{ chat.question[:50] }}{% if chat.question|length > 50 %}...{% endif %}</h6>
+                                    <p class="text-muted mb-1">{{ chat.answer[:100] }}{% if chat.answer|length > 100 %}...{% endif %}</p>
+                                    <small class="text-muted">
+                                        <i class="fas fa-clock me-1"></i>
+                                        {{ chat.created_at.strftime('%B %d, %Y at %I:%M %p') }}
+                                        <span class="badge bg-primary ms-2">{{ chat.feature_used }}</span>
+                                    </small>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-comments text-muted" style="font-size: 3rem;"></i>
+                            <h6 class="text-muted mt-3">No activity yet</h6>
+                            <p class="text-muted">Start chatting to see your activity here!</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.profile-avatar {
+    position: relative;
+}
+
+.stat-item {
+    padding: 20px 0;
+}
+
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e9ecef;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 30px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -22px;
+    top: 0;
+    width: 30px;
+    height: 30px;
+    background: var(--primary-color);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 3px solid var(--primary-color);
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function changePassword() {
+    const f = document.getElementById('pwForm');
+    if (f) f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+function exportData() {
+    fetch('/api/profile/export')
+    .then(r => r.json())
+    .then(data => {
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'neethi_chats.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+}
+
+function clearHistory() {
+    if (!confirm('This will delete all your chats permanently. Continue?')) return;
+    fetch('/api/profile/clear-history', {method: 'POST'})
+    .then(r => r.json()).then(res => {
+        if (res.ok) {
+            location.reload();
+        } else if (res.error) {
+            alert(res.error);
+        }
+    });
+}
+
+function submitPasswordChange() {
+    const currentPw = document.getElementById('currentPw').value.trim();
+    const newPw = document.getElementById('newPw').value.trim();
+    if (!currentPw || !newPw) { alert('Please enter both current and new passwords.'); return; }
+    fetch('/api/profile/change-password', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({current_password: currentPw, new_password: newPw})
+    }).then(r => r.json()).then(res => {
+        if (res.ok) {
+            alert('Password updated successfully.');
+            document.getElementById('pwForm').style.display = 'none';
+            document.getElementById('currentPw').value = '';
+            document.getElementById('newPw').value = '';
+        } else if (res.error) {
+            alert(res.error);
+        }
+    });
+}
+</script>
+{% endblock %}

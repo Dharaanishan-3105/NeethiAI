@@ -1,0 +1,1132 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - NeethiAI{% endblock %}
+
+{% block content %}
+<div class="chat-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <button class="new-chat-btn" onclick="startNewChat()">
+                <i class="fas fa-plus"></i>
+                New chat
+            </button>
+        </div>
+        <div class="chat-history" id="chatHistory">
+            <!-- Chat history will be loaded here -->
+        </div>
+    </div>
+
+    <!-- Main Chat Area -->
+    <div class="main-chat">
+        <!-- Chat Header -->
+        <div class="chat-header">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                <div>
+                    <h1>NeethiAI</h1>
+                    <p>Your Legal AI Assistant</p>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <div class="btn-group" role="group" aria-label="Language toggle">
+                        <button type="button" class="btn btn-sm btn-outline-light" id="langEn" onclick="setForcedLanguage('en')">EN</button>
+                        <button type="button" class="btn btn-sm btn-outline-light" id="langTa" onclick="setForcedLanguage('ta')">TA</button>
+                        <button type="button" class="btn btn-sm btn-outline-light" id="langAuto" onclick="setForcedLanguage(null)">AUTO</button>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-light" id="stopTTS" onclick="stopSpeaking()" title="Stop voice" style="display:none;">
+                        <i class="fas fa-stop"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Messages -->
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+                <div class="message assistant">
+                    <div class="message-content">
+                        <h3>Welcome to NeethiAI! 👋</h3>
+                        <p>I'm your legal AI assistant specializing in Indian law. I can help you with:</p>
+                        <ul>
+                            <li>Legal questions and advice</li>
+                            <li>Document analysis</li>
+                            <li>Tax advisory</li>
+                            <li>Fake notice detection</li>
+                        </ul>
+                        <p>What would you like to know?</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Input -->
+        <div class="chat-input-container">
+            <div class="chat-input-wrapper">
+                <div class="input-group">
+                    <input type="file" id="fileInput" accept=".pdf,.docx,.jpg,.jpeg,.png" style="display: none;" onchange="handleFileUpload()">
+                    <button id="fileButton" title="Upload file" onclick="document.getElementById('fileInput').click()">
+                        <i class="fas fa-paperclip"></i>
+                    </button>
+                    <textarea 
+                        id="messageInput" 
+                        placeholder="Ask me anything about Indian law..." 
+                        rows="1"
+                        maxlength="4000"
+                    ></textarea>
+                    <button id="voiceButton" title="Voice input" onclick="toggleVoice()">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                    <div id="voiceWave" class="voice-wave" title="Listening...">
+                        <span class="voice-bar"></span>
+                        <span class="voice-bar"></span>
+                        <span class="voice-bar"></span>
+                        <span class="voice-bar"></span>
+                        <span class="voice-bar"></span>
+                    </div>
+                    <button id="sendButton" onclick="sendMessage()" disabled>
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                <div class="input-footer">
+                    <small>NeethiAI can make mistakes. Consider checking important information.</small>
+                    <button id="playResponse" onclick="playResponse()" style="display:none; margin-left:10px;" class="btn btn-sm btn-outline-light">
+                        <i class="fas fa-volume-up"></i>
+                    </button>
+                    <button id="stopResponse" onclick="stopSpeaking()" style="display:none; margin-left:6px;" class="btn btn-sm btn-outline-light" title="Stop voice">
+                        <i class="fas fa-stop"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.chat-container {
+    display: flex;
+    height: 100vh;
+    background: #343541;
+    color: #ffffff;
+}
+
+.sidebar {
+    width: 260px;
+    background: #202123;
+    border-right: 1px solid #4d4d4f;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-header {
+    padding: 1rem;
+    border-bottom: 1px solid #4d4d4f;
+}
+
+.new-chat-btn {
+    width: 100%;
+    padding: 0.75rem;
+    background: transparent;
+    border: 1px solid #4d4d4f;
+    color: #ffffff;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.new-chat-btn:hover {
+    background: #2a2b32;
+}
+
+.chat-history {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.chat-item {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background: #2a2b32;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.chat-item:hover {
+    background: #343541;
+}
+
+.chat-item:active {
+    background: #10a37f;
+    transform: scale(0.98);
+}
+
+.chat-preview {
+    color: #ffffff;
+    font-size: 14px;
+    margin-bottom: 0.25rem;
+}
+
+.chat-date {
+    color: #8e8ea0;
+    font-size: 12px;
+}
+
+.main-chat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #343541;
+}
+
+.chat-header {
+    padding: 2rem;
+    text-align: center;
+    border-bottom: 1px solid #4d4d4f;
+}
+
+.chat-header h1 {
+    font-size: 2rem;
+    margin: 0;
+    color: #ffffff;
+}
+
+.chat-header p {
+    margin: 0.5rem 0 0 0;
+    color: #8e8ea0;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 2rem;
+    max-width: 768px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.welcome-message {
+    margin-bottom: 2rem;
+}
+
+.message {
+    margin-bottom: 1.5rem;
+    display: flex;
+    gap: 1rem;
+}
+
+.message.user {
+    flex-direction: row-reverse;
+}
+
+.message-content {
+    max-width: 70%;
+    padding: 1rem 1.5rem;
+    border-radius: 18px;
+    line-height: 1.6;
+}
+
+.message.assistant .message-content {
+    background: #444654;
+    color: #ffffff;
+}
+
+.message.user .message-content {
+    background: #10a37f;
+    color: #ffffff;
+}
+
+.message-content h3 {
+    margin: 0 0 1rem 0;
+    color: #ffffff;
+}
+
+.message-content ul {
+    margin: 1rem 0;
+    padding-left: 1.5rem;
+}
+
+.message-content li {
+    margin: 0.5rem 0;
+}
+
+.chat-input-container {
+    padding: 1rem 2rem 2rem;
+    border-top: 1px solid #4d4d4f;
+}
+
+.chat-input-wrapper {
+    max-width: 768px;
+    margin: 0 auto;
+}
+
+.input-group {
+    display: flex;
+    align-items: flex-end;
+    background: #40414f;
+    border: 1px solid #565869;
+    border-radius: 12px;
+    padding: 0.75rem;
+    gap: 0.5rem;
+}
+
+.input-group:focus-within {
+    border-color: #10a37f;
+}
+
+#messageInput {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 16px;
+    line-height: 1.5;
+    resize: none;
+    outline: none;
+    min-height: 24px;
+    max-height: 200px;
+}
+
+#messageInput::placeholder {
+    color: #8e8ea0;
+}
+
+#sendButton {
+    background: #10a37f;
+    border: none;
+    color: #ffffff;
+    padding: 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    transition: background-color 0.2s;
+}
+
+#fileButton, #voiceButton {
+    background: transparent;
+    border: 1px solid #565869;
+    color: #ffffff;
+    padding: 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    transition: background-color 0.2s;
+}
+
+#fileButton:hover, #voiceButton:hover {
+    background: #2a2b32;
+}
+
+#voiceButton.active {
+    background: #0d8f6b;
+    box-shadow: 0 0 0 0 rgba(16,163,127, 0.7);
+    animation: pulse 1.5s infinite;
+}
+
+#sendButton:hover:not(:disabled) {
+    background: #0d8f6b;
+}
+
+#sendButton:disabled {
+    background: #565869;
+    cursor: not-allowed;
+}
+
+.input-footer {
+    text-align: center;
+    margin-top: 0.5rem;
+}
+
+.input-footer small {
+    color: #8e8ea0;
+    font-size: 12px;
+}
+
+.loading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #8e8ea0;
+}
+
+.loading-dots {
+    display: flex;
+    gap: 4px;
+}
+
+.loading-dot {
+    width: 4px;
+    height: 4px;
+    background: #8e8ea0;
+    border-radius: 50%;
+    animation: loading 1.4s infinite ease-in-out;
+}
+
+.loading-dot:nth-child(1) { animation-delay: -0.32s; }
+.loading-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes loading {
+    0%, 80%, 100% { transform: scale(0); }
+    40% { transform: scale(1); }
+}
+
+/* Mic waveform */
+.voice-wave {
+    display: none;
+    height: 18px;
+    align-items: flex-end;
+    gap: 3px;
+}
+.voice-wave.active { display: inline-flex; }
+.voice-bar {
+    width: 3px;
+    height: 6px;
+    background: #10a37f;
+    border-radius: 2px;
+    transition: height 120ms ease;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(16,163,127, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(16,163,127, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16,163,127, 0); }
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        display: none;
+    }
+    
+    .chat-messages {
+        padding: 1rem;
+    }
+    
+    .chat-input-container {
+        padding: 1rem;
+    }
+}
+</style>
+
+<script>
+let isLoading = false;
+let recognition = null;
+let isRecording = false;
+let lastResponse = '';
+let forcedLanguage = null; // 'en' | 'ta' | null
+let currentChatId = null;
+let waveInterval = null;
+let ttsSpeaking = false;
+let preferredVoices = [];
+
+// Auto-resize textarea
+document.getElementById('messageInput').addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+    
+    // Enable/disable send button
+    const sendButton = document.getElementById('sendButton');
+    sendButton.disabled = !this.value.trim() || isLoading;
+});
+
+// Send message on Enter (but allow Shift+Enter for new line)
+document.getElementById('messageInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (!isLoading && this.value.trim()) {
+            sendMessage();
+        }
+    }
+});
+
+function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const message = input.value.trim();
+    
+    if (!message || isLoading) return;
+    
+    // Add user message to chat
+    addMessage(message, 'user');
+    
+    // Clear input
+    input.value = '';
+    input.style.height = 'auto';
+    document.getElementById('sendButton').disabled = true;
+    
+    // Show loading
+    showLoading();
+    
+    // Send to API
+    fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ question: message, force_language: forcedLanguage })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideLoading();
+        if (data.error) {
+            addMessage('Sorry, I encountered an error: ' + data.error, 'assistant');
+        } else {
+            addMessage(data.answer, 'assistant');
+            lastResponse = data.answer;
+            // Show play button for response
+            document.getElementById('playResponse').style.display = 'inline-block';
+            
+            // Store chat in history
+            if (data.chat_id) {
+                currentChatId = data.chat_id;
+                loadChatHistory(); // Refresh sidebar
+            }
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        addMessage('Sorry, I encountered an error. Please try again.', 'assistant');
+        console.error('Error:', error);
+    });
+}
+
+function setForcedLanguage(lang) {
+    forcedLanguage = lang;
+    document.getElementById('langEn').classList.toggle('btn-success', lang === 'en');
+    document.getElementById('langTa').classList.toggle('btn-success', lang === 'ta');
+    document.getElementById('langAuto').classList.toggle('btn-success', lang === null);
+}
+
+function addMessage(content, sender) {
+    const messagesContainer = document.getElementById('chatMessages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${sender}`;
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    contentDiv.innerHTML = content.replace(/\n/g, '<br>');
+    
+    messageDiv.appendChild(contentDiv);
+    messagesContainer.appendChild(messageDiv);
+    
+    // For user messages, scroll to bottom. For assistant messages, scroll to top of the message
+    setTimeout(() => {
+        if (sender === 'user') {
+            messagesContainer.scrollTo({
+                top: messagesContainer.scrollHeight,
+                behavior: 'smooth'
+            });
+        } else {
+            // Scroll to the top of the assistant message for better readability
+            const messageTop = messageDiv.offsetTop;
+            messagesContainer.scrollTo({
+                top: messageTop - 20, // 20px padding from top
+                behavior: 'smooth'
+            });
+        }
+    }, 100);
+
+    // Auto-speak assistant messages
+    if (sender === 'assistant') {
+        const plainText = contentDiv.textContent || contentDiv.innerText || '';
+        if (plainText.trim()) {
+            speakMultilingual(plainText.trim());
+        }
+    }
+}
+
+function showLoading() {
+    isLoading = true;
+    const messagesContainer = document.getElementById('chatMessages');
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'message assistant';
+    loadingDiv.id = 'loadingMessage';
+    
+    loadingDiv.innerHTML = `
+        <div class="message-content">
+            <div class="loading">
+                <span>NeethiAI is thinking</span>
+                <div class="loading-dots">
+                    <div class="loading-dot"></div>
+                    <div class="loading-dot"></div>
+                    <div class="loading-dot"></div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    messagesContainer.appendChild(loadingDiv);
+    // Scroll to top of loading message for better readability
+    setTimeout(() => {
+        const loadingTop = loadingDiv.offsetTop;
+        messagesContainer.scrollTo({
+            top: loadingTop - 20, // 20px padding from top
+            behavior: 'smooth'
+        });
+    }, 100);
+}
+
+function hideLoading() {
+    isLoading = false;
+    const loadingMessage = document.getElementById('loadingMessage');
+    if (loadingMessage) {
+        loadingMessage.remove();
+    }
+    document.getElementById('sendButton').disabled = false;
+}
+
+function toggleVoice() {
+    // Basic support check
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        alert('Speech recognition not supported in this browser. Please use the latest Chrome/Edge.');
+        return;
+    }
+    // Secure context check (required by some browsers)
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (window.isSecureContext === false && !isLocalhost) {
+        alert('Microphone requires HTTPS. Please run on https:// or localhost.');
+        return;
+    }
+    if (!recognition) {
+        recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.lang = 'en-IN';
+        recognition.onresult = function(event) {
+            let transcript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript;
+            }
+            const input = document.getElementById('messageInput');
+            input.value = transcript;
+            input.dispatchEvent(new Event('input'));
+            // burst waveform on new interim
+            pumpWaveOnce();
+        };
+        recognition.onend = function() {
+            isRecording = false;
+            document.getElementById('voiceButton').classList.remove('active');
+            stopWave();
+        };
+        recognition.onerror = function() {
+            isRecording = false;
+            document.getElementById('voiceButton').classList.remove('active');
+            stopWave();
+        };
+    }
+    if (!isRecording) {
+        // Request mic permission explicitly first to avoid NotAllowedError
+        ensureMicPermission().then(() => {
+            isRecording = true;
+            document.getElementById('voiceButton').classList.add('active');
+            startWave();
+            try {
+                recognition.start();
+            } catch (e) {
+                stopWave();
+                document.getElementById('voiceButton').classList.remove('active');
+                alert('Could not start microphone: ' + (e?.message || e));
+            }
+        }).catch(err => {
+            alert('Microphone permission denied. Please allow mic access and try again.');
+        });
+    } else {
+        isRecording = false;
+        document.getElementById('voiceButton').classList.remove('active');
+        stopWave();
+        try { recognition.stop(); } catch(e) {}
+    }
+}
+
+function ensureMicPermission() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        return Promise.reject('getUserMedia not available');
+    }
+    return navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+        // Immediately stop tracks; we only needed permission warm-up
+        try { stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+        return true;
+    });
+}
+
+function startWave() {
+    const wave = document.getElementById('voiceWave');
+    if (!wave) return;
+    wave.classList.add('active');
+    if (waveInterval) clearInterval(waveInterval);
+    waveInterval = setInterval(() => {
+        const bars = wave.querySelectorAll('.voice-bar');
+        bars.forEach((bar, idx) => {
+            const h = Math.max(4, Math.floor(Math.random()*16)+4);
+            bar.style.height = h + 'px';
+        });
+    }, 120);
+}
+
+function pumpWaveOnce() {
+    const wave = document.getElementById('voiceWave');
+    if (!wave) return;
+    const bars = wave.querySelectorAll('.voice-bar');
+    bars.forEach((bar, idx) => {
+        const h = Math.max(8, Math.floor(Math.random()*20)+8);
+        bar.style.height = h + 'px';
+    });
+}
+
+function stopWave() {
+    const wave = document.getElementById('voiceWave');
+    if (!wave) return;
+    wave.classList.remove('active');
+    if (waveInterval) {
+        clearInterval(waveInterval);
+        waveInterval = null;
+    }
+    const bars = wave.querySelectorAll('.voice-bar');
+    bars.forEach((bar) => { bar.style.height = '6px'; });
+}
+
+function playResponse() {
+    if ('speechSynthesis' in window && lastResponse) {
+        speakMultilingual(lastResponse);
+    }
+}
+
+// Text-to-Speech utilities
+function initVoices() {
+    if (!('speechSynthesis' in window)) return;
+    preferredVoices = window.speechSynthesis.getVoices();
+    console.log('Available voices:', preferredVoices.map(v => ({ name: v.name, lang: v.lang, localService: v.localService })));
+    
+    // Check for Tamil voices specifically
+    const tamilVoices = preferredVoices.filter(v => 
+        v.lang && (v.lang.toLowerCase().includes('ta') || v.name.toLowerCase().includes('tamil'))
+    );
+    console.log('Tamil voices found:', tamilVoices.map(v => ({ name: v.name, lang: v.lang })));
+}
+if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = initVoices;
+    initVoices();
+    // Also try again after a delay as voices might load asynchronously
+    setTimeout(initVoices, 1000);
+}
+
+function detectTamil(text) {
+    // Tamil Unicode range
+    return /[\u0B80-\u0BFF]/.test(text);
+}
+
+function pickVoice(lang) {
+    if (!preferredVoices || preferredVoices.length === 0) return null;
+    const langPrefix = lang === 'ta' ? 'ta' : 'en';
+    
+    if (langPrefix === 'ta') {
+        // For Tamil, be very aggressive in finding any Tamil voice
+        const tamilVoices = preferredVoices.filter(v => {
+            const lang = (v.lang || '').toLowerCase();
+            const name = (v.name || '').toLowerCase();
+            return lang.includes('ta') || 
+                   lang.includes('tamil') || 
+                   name.includes('tamil') || 
+                   name.includes('தமிழ்') ||
+                   name.includes('ta-') ||
+                   lang === 'ta' ||
+                   lang === 'ta-in' ||
+                   lang === 'ta_lk';
+        });
+        
+        console.log('Tamil voice selection:', tamilVoices.map(v => ({ name: v.name, lang: v.lang })));
+        
+        // Prefer local voices over remote ones
+        const localTamil = tamilVoices.filter(v => v.localService);
+        if (localTamil.length > 0) {
+            console.log('Using local Tamil voice:', localTamil[0].name);
+            return localTamil[0];
+        }
+        
+        if (tamilVoices.length > 0) {
+            console.log('Using Tamil voice:', tamilVoices[0].name);
+            return tamilVoices[0];
+        }
+        
+        console.log('No Tamil voice found, will use default');
+        return null;
+    } else {
+        // For English, use standard selection
+        const preferredOrder = ['en-IN', 'en-GB', 'en-US', 'en'];
+        for (const code of preferredOrder) {
+            const v = preferredVoices.find(v => v.lang && v.lang.toLowerCase().startsWith(code.toLowerCase()));
+            if (v) return v;
+        }
+        return null;
+    }
+}
+
+function splitByLanguage(text) {
+    // Split text into runs of Tamil vs non-Tamil to choose voices per run
+    const parts = [];
+    let buffer = '';
+    let lastIsTamil = null;
+    for (const ch of text) {
+        const isTa = /[\u0B80-\u0BFF]/.test(ch);
+        if (lastIsTamil === null) {
+            buffer = ch;
+            lastIsTamil = isTa;
+        } else if (isTa === lastIsTamil) {
+            buffer += ch;
+        } else {
+            parts.push({ text: buffer, lang: lastIsTamil ? 'ta' : 'en' });
+            buffer = ch;
+            lastIsTamil = isTa;
+        }
+    }
+    if (buffer) parts.push({ text: buffer, lang: lastIsTamil ? 'ta' : 'en' });
+    return parts;
+}
+
+function speakText(text) {
+    if (!('speechSynthesis' in window)) return;
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    // Clean punctuation and whitespace for smoother speech
+    const cleaned = (text || '')
+        .replace(/[#*.,;:!?()[\]{}'"]/g, ' ')  // Remove punctuation
+        .replace(/\s+/g, ' ')  // Normalize whitespace
+        .trim();
+    
+    if (!cleaned) return;  // Skip if empty after cleaning
+    
+    const utter = new SpeechSynthesisUtterance(cleaned);
+    const lang = detectTamil(cleaned) ? 'ta' : 'en'; // do not force English to speed up
+    utter.lang = lang === 'ta' ? 'ta-IN' : 'en-IN';
+    
+    // Adjust speech parameters for better speed and naturalness
+    utter.rate = lang === 'ta' ? 2.0 : 1.0;  // Much faster for Tamil to reduce word gaps
+    utter.pitch = 1.0;  // Normal pitch
+    utter.volume = 1.0;  // Full volume
+    
+    const voice = pickVoice(lang);
+    if (voice) utter.voice = voice;
+    utter.onstart = () => { 
+        ttsSpeaking = true; 
+        const btn1 = document.getElementById('stopTTS'); if (btn1) btn1.style.display = 'inline-block';
+        const btn2 = document.getElementById('stopResponse'); if (btn2) btn2.style.display = 'inline-block';
+    };
+    utter.onend = () => { 
+        ttsSpeaking = false; 
+        const btn1 = document.getElementById('stopTTS'); if (btn1) btn1.style.display = 'none';
+        const btn2 = document.getElementById('stopResponse'); if (btn2) btn2.style.display = 'none';
+    };
+    utter.onerror = () => { 
+        ttsSpeaking = false; 
+        const btn1 = document.getElementById('stopTTS'); if (btn1) btn1.style.display = 'none';
+        const btn2 = document.getElementById('stopResponse'); if (btn2) btn2.style.display = 'none';
+    };
+    window.speechSynthesis.speak(utter);
+}
+
+function speakMultilingual(text) {
+    if (!('speechSynthesis' in window)) return;
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    const parts = splitByLanguage(text);
+    console.log('Text parts for TTS:', parts);
+    if (parts.length === 0) return;
+    const queue = parts.map(p => {
+        // Clean punctuation and excessive whitespace for smoother speech
+        const cleaned = (p.text || '')
+            .replace(/[#*.,;:!?()[\]{}'"]/g, ' ')  // Remove punctuation
+            .replace(/\s+/g, ' ')  // Normalize whitespace
+            .trim();
+        
+        if (!cleaned) return null;  // Skip empty parts
+        
+        const u = new SpeechSynthesisUtterance(cleaned);
+        // Choose voice strictly by detected script to prevent English speeding up
+        const lang = p.lang; // do NOT override with forcedLanguage for TTS
+        u.lang = lang === 'ta' ? 'ta-IN' : 'en-IN';
+        
+        // Adjust speech parameters for better speed and naturalness
+        u.rate = lang === 'ta' ? 2.0 : 1.0;  // Much faster for Tamil to reduce word gaps
+        u.pitch = lang === 'ta' ? 1.0 : 1.0;  // Normal pitch
+        u.volume = 1.0;  // Full volume
+        
+        const voice = pickVoice(lang);
+        if (voice) {
+            u.voice = voice;
+            console.log(`Speaking "${cleaned.substring(0, 50)}..." with voice: ${voice.name} (${voice.lang}) at rate ${u.rate}`);
+        } else {
+            console.log(`Speaking "${cleaned.substring(0, 50)}..." with default voice for ${lang} at rate ${u.rate}`);
+        }
+        return u;
+    }).filter(u => u !== null);  // Remove null entries
+    // If Tamil is expected but no Tamil-capable voice detected, show a once-per-load hint
+    const needsTamil = (forcedLanguage === 'ta') || parts.some(p => p.lang === 'ta');
+    if (needsTamil) {
+        const hasTamilVoice = !!pickVoice('ta');
+        if (!hasTamilVoice && !window.__neethiTamilVoiceWarned) {
+            window.__neethiTamilVoiceWarned = true;
+            console.warn('No Tamil TTS voice found. Please install a Tamil voice in OS settings.');
+            try {
+                const note = document.createElement('div');
+                note.style.cssText = 'margin-top:6px;color:#ffc107;font-size:12px;';
+                note.textContent = 'Tamil voice not installed on this device. Install a Tamil voice in Windows Settings → Time & Language → Language & region → Add a language → Tamil (include Speech), then restart the browser.';
+                const footer = document.querySelector('.input-footer');
+                if (footer) footer.appendChild(note);
+            } catch (e) {}
+        }
+    }
+    const btn1 = document.getElementById('stopTTS');
+    const btn2 = document.getElementById('stopResponse');
+    ttsSpeaking = true; if (btn1) btn1.style.display = 'inline-block'; if (btn2) btn2.style.display = 'inline-block';
+    for (let i = 0; i < queue.length; i++) {
+        const u = queue[i];
+        u.onend = () => {
+            if (i === queue.length - 1) {
+                ttsSpeaking = false; if (btn1) btn1.style.display = 'none'; if (btn2) btn2.style.display = 'none';
+            }
+        };
+        u.onerror = () => {
+            if (i === queue.length - 1) {
+                ttsSpeaking = false; if (btn1) btn1.style.display = 'none'; if (btn2) btn2.style.display = 'none';
+            }
+        };
+        window.speechSynthesis.speak(u);
+    }
+}
+
+function stopSpeaking() {
+    if (!('speechSynthesis' in window)) return;
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    ttsSpeaking = false;
+    const btn1 = document.getElementById('stopTTS');
+    if (btn1) btn1.style.display = 'none';
+    const btn2 = document.getElementById('stopResponse');
+    if (btn2) btn2.style.display = 'none';
+}
+
+function startNewChat() {
+    const messagesContainer = document.getElementById('chatMessages');
+    
+    // Reset state
+    currentChatId = null;
+    lastResponse = '';
+    document.getElementById('playResponse').style.display = 'none';
+    
+    messagesContainer.innerHTML = `
+        <div class="welcome-message">
+            <div class="message assistant">
+                <div class="message-content">
+                    <h3>Welcome to NeethiAI! 👋</h3>
+                    <p>I'm your legal AI assistant specializing in Indian law. I can help you with:</p>
+                    <ul>
+                        <li>Legal questions and advice</li>
+                        <li>Document analysis</li>
+                        <li>Tax advisory</li>
+                        <li>Fake notice detection</li>
+                    </ul>
+                    <p>What would you like to know?</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Scroll to top
+    messagesContainer.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+    });
+}
+
+// Load chat history on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Load chat history if needed
+    loadChatHistory();
+});
+
+function handleFileUpload() {
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Show loading
+    showLoading();
+    
+    // Determine endpoint based on file type
+    const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(file.name);
+    const endpoint = isImage ? '/api/detect/fake-notice' : '/api/upload/document';
+    
+    fetch(endpoint, {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin'
+    })
+    .then(async (response) => {
+        let raw = '';
+        try { raw = await response.text(); } catch (e) {}
+        let data = {};
+        try { data = raw ? JSON.parse(raw) : {}; } catch (e) {
+            throw new Error(raw || response.statusText || 'Upload failed');
+        }
+        if (!response.ok && data && data.error) {
+            throw new Error(data.error);
+        }
+        return data;
+    })
+    .then(data => {
+        hideLoading();
+        if (data.error) {
+            addMessage('Sorry, I encountered an error: ' + data.error, 'assistant');
+        } else {
+            if (isImage) {
+                const sourcesHtml = (data.sources && data.sources.length) ? `\n\n<strong>Sources:</strong><br>${data.sources.map(s=>`<a href="${s}" target="_blank">${s}</a>`).join('<br>')}` : '';
+                const message = `📷 <strong>Fake Notice Analysis</strong><br>${(data.result||'No result')}<br>${sourcesHtml}`;
+                addMessage(message, 'assistant');
+                lastResponse = data.result || '';
+            } else {
+                const sourcesHtml = (data.sources && data.sources.length) ? `\n\n<strong>Sources:</strong><br>${data.sources.map(s=>`<a href="${s}" target="_blank">${s}</a>`).join('<br>')}` : '';
+                const message = `📄 <strong>Document Summary</strong><br>${(data.summary||'No summary')}<br>${sourcesHtml}`;
+                addMessage(message, 'assistant');
+                lastResponse = data.summary || '';
+            }
+            if (lastResponse) {
+                document.getElementById('playResponse').style.display = 'inline-block';
+            }
+            // Refresh history if server created a chat record
+            if (data.chat_id) {
+                loadChatHistory();
+            }
+        }
+    })
+    .catch(error => {
+        hideLoading();
+        addMessage('Sorry, I encountered an error uploading the file: ' + (error?.message || 'unknown error'), 'assistant');
+        console.error('Error:', error);
+    });
+    
+    // Clear file input
+    fileInput.value = '';
+}
+
+function loadChatHistory() {
+    fetch('/api/chat/history')
+    .then(response => response.json())
+    .then(data => {
+        if (data.chats) {
+            const historyContainer = document.getElementById('chatHistory');
+            historyContainer.innerHTML = '';
+            
+            data.chats.forEach(chat => {
+                const chatItem = document.createElement('div');
+                chatItem.className = 'chat-item';
+                chatItem.onclick = () => {
+                    console.log('Chat item clicked:', chat.id); // Debug log
+                    
+                    // Add loading state
+                    chatItem.style.opacity = '0.6';
+                    chatItem.style.pointerEvents = 'none';
+                    
+                    loadChat(chat.id);
+                    
+                    // Remove loading state after a delay
+                    setTimeout(() => {
+                        chatItem.style.opacity = '1';
+                        chatItem.style.pointerEvents = 'auto';
+                    }, 1000);
+                };
+                
+                const preview = chat.question.length > 50 ? 
+                    chat.question.substring(0, 50) + '...' : 
+                    chat.question;
+                
+                chatItem.innerHTML = `
+                    <div class="chat-preview">${preview}</div>
+                    <div class="chat-date">${new Date(chat.created_at).toLocaleDateString()}</div>
+                `;
+                
+                historyContainer.appendChild(chatItem);
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error loading chat history:', error);
+    });
+}
+
+function loadChat(chatId) {
+    console.log('Loading chat:', chatId); // Debug log
+    
+    fetch(`/api/chat/${chatId}`)
+    .then(response => {
+        console.log('Response status:', response.status); // Debug log
+        return response.json();
+    })
+    .then(data => {
+        console.log('Chat data:', data); // Debug log
+        
+        if (data.error) {
+            console.error('API Error:', data.error);
+            addMessage('Error loading chat: ' + data.error, 'assistant');
+            return;
+        }
+        
+        if (data.id) { // The API returns the chat data directly, not nested under 'chat'
+            const messagesContainer = document.getElementById('chatMessages');
+            
+            // Clear current chat and reset state
+            messagesContainer.innerHTML = '';
+            currentChatId = chatId;
+            lastResponse = data.answer;
+            
+            // Hide play button initially
+            document.getElementById('playResponse').style.display = 'none';
+            
+            // Add the chat messages without auto-scroll
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.className = 'message user';
+            const userContentDiv = document.createElement('div');
+            userContentDiv.className = 'message-content';
+            userContentDiv.innerHTML = data.question.replace(/\n/g, '<br>');
+            userMessageDiv.appendChild(userContentDiv);
+            messagesContainer.appendChild(userMessageDiv);
+            
+            const assistantMessageDiv = document.createElement('div');
+            assistantMessageDiv.className = 'message assistant';
+            const assistantContentDiv = document.createElement('div');
+            assistantContentDiv.className = 'message-content';
+            assistantContentDiv.innerHTML = data.answer.replace(/\n/g, '<br>');
+            assistantMessageDiv.appendChild(assistantContentDiv);
+            messagesContainer.appendChild(assistantMessageDiv);
+            
+            // Show play button for the loaded response
+            document.getElementById('playResponse').style.display = 'inline-block';
+            
+            // Scroll to top of the conversation
+            messagesContainer.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+            
+            console.log('Chat loaded successfully'); // Debug log
+        } else {
+            console.error('No chat data found in response');
+            addMessage('No chat data found. Please try again.', 'assistant');
+        }
+    })
+    .catch(error => {
+        console.error('Error loading chat:', error);
+        addMessage('Error loading chat history. Please try again.', 'assistant');
+    });
+}
+</script>
+{% endblock %}
