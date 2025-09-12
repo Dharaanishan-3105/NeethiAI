@@ -1518,9 +1518,9 @@ if __name__ == '__main__':
     
     if is_production:
         print("🚀 Starting NeethiAI in Production Mode...")
-        # Use gunicorn for production
-        from gunicorn.app.wsgiapp import WSGIApplication
-        WSGIApplication().run()
+        # Use waitress for production (Windows compatible)
+        from waitress import serve
+        serve(app, host='0.0.0.0', port=port)
     else:
         print("🚀 Starting NeethiAI Flask Application...")
         print("📱 Open your browser and go to: http://localhost:5000")
