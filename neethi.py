@@ -67,6 +67,7 @@ else:
     # Local development fallback
     app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://neethi_user:HariDharaan%402025@localhost/neethi_ai'
     print("🔗 Using local development database")
+    print("⚠️  WARNING: DATABASE_URL not found! Make sure to set it in Render environment variables.")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Limit uploads to 10 MB to prevent crashes
@@ -1507,14 +1508,24 @@ def search_handbook():
 
 # Initialize database and run app
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        
     # Get port from environment variable (Render sets this)
     port = int(os.getenv('PORT', 5000))
     
     # Check if running in production
     is_production = os.getenv('FLASK_ENV') == 'production'
+    
+    # Try to create database tables, but don't fail if database is not available
+    try:
+        with app.app_context():
+            db.create_all()
+            print("✅ Database tables created successfully")
+    except Exception as e:
+        print(f"⚠️  Database connection failed: {e}")
+        if is_production:
+            print("❌ Cannot start in production without database connection!")
+            exit(1)
+        else:
+            print("⚠️  Continuing in development mode without database...")
     
     if is_production:
         print("🚀 Starting NeethiAI in Production Mode...")
