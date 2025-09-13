@@ -438,20 +438,43 @@
     
     .chat-input-container {
         padding: 1rem;
+        padding-bottom: 2rem; /* Extra space for mobile keyboard */
+    }
+    
+    .input-group {
+        flex-wrap: nowrap;
+    }
+    
+    .btn-send {
+        min-width: 50px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .form-control {
+        font-size: 16px; /* Prevent zoom on iOS */
     }
     
     .mobile-menu-btn {
         display: block !important;
         position: fixed;
-        top: 1rem;
-        left: 1rem;
+        top: 0.5rem;
+        left: 0.5rem;
         z-index: 1001;
         background: #2d2d2d;
         border: 1px solid #4d4d4f;
         color: #ffffff;
-        padding: 0.5rem;
+        padding: 0.4rem;
         border-radius: 6px;
         cursor: pointer;
+        font-size: 14px;
+        width: 40px;
+        height: 40px;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
     }
     
     .sidebar-overlay {
@@ -895,16 +918,57 @@ function speakMultilingual(text) {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     if (isMobile) {
         console.log('Mobile device detected, using simplified TTS');
-        // For mobile, use a simpler approach
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
+        
+        // Wait for voices to load on mobile
+        if (window.speechSynthesis.getVoices().length === 0) {
+            window.speechSynthesis.addEventListener('voiceschanged', () => {
+                speakMobileText(text);
+            });
+            return;
+        }
+        
+        speakMobileText(text);
+        return;
+    }
+    
+    function speakMobileText(text) {
+        // Clean text for mobile
+        const cleanText = text.replace(/[#*.,;:!?()[\]{}'"]/g, ' ').replace(/\s+/g, ' ').trim();
+        
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.rate = 0.9; // Slightly slower for mobile
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
-        utterance.onstart = () => console.log('Mobile TTS started');
-        utterance.onend = () => console.log('Mobile TTS ended');
-        utterance.onerror = (event) => console.error('Mobile TTS error:', event);
+        utterance.lang = 'en-US'; // Default to English for mobile
+        
+        utterance.onstart = () => {
+            console.log('Mobile TTS started');
+            ttsSpeaking = true;
+            const btn1 = document.getElementById('stopTTS');
+            const btn2 = document.getElementById('stopResponse');
+            if (btn1) btn1.style.display = 'inline-block';
+            if (btn2) btn2.style.display = 'inline-block';
+        };
+        
+        utterance.onend = () => {
+            console.log('Mobile TTS ended');
+            ttsSpeaking = false;
+            const btn1 = document.getElementById('stopTTS');
+            const btn2 = document.getElementById('stopResponse');
+            if (btn1) btn1.style.display = 'none';
+            if (btn2) btn2.style.display = 'none';
+        };
+        
+        utterance.onerror = (event) => {
+            console.error('Mobile TTS error:', event);
+            ttsSpeaking = false;
+            const btn1 = document.getElementById('stopTTS');
+            const btn2 = document.getElementById('stopResponse');
+            if (btn1) btn1.style.display = 'none';
+            if (btn2) btn2.style.display = 'none';
+        };
+        
         window.speechSynthesis.speak(utterance);
-        return;
     }
     
     console.log('Starting TTS for text:', text.substring(0, 100) + '...');
@@ -1090,6 +1154,17 @@ function handleFileUpload() {
     const file = fileInput.files[0];
     
     if (!file) return;
+    
+    // Mobile-specific file validation
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+        console.log('Mobile file upload detected');
+        // Add mobile-specific validation
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit for mobile
+            alert('File size must be less than 5MB on mobile');
+            return;
+        }
+    }
     
     const formData = new FormData();
     formData.append('file', file);
