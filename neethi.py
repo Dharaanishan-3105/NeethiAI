@@ -63,11 +63,14 @@ if database_url:
     # Render provides DATABASE_URL, use it directly
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     print(f"🔗 Using production database: {database_url[:50]}...")
+    print("✅ Database URL found - ready for production!")
 else:
     # Local development fallback
     app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://neethi_user:HariDharaan%402025@localhost/neethi_ai'
     print("🔗 Using local development database")
     print("⚠️  WARNING: DATABASE_URL not found! Make sure to set it in Render environment variables.")
+    print("💡 To fix: Link your PostgreSQL database to the web service in Render dashboard")
+    print("📋 Environment variables available:", [k for k in os.environ.keys() if 'DATABASE' in k.upper()])
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Limit uploads to 10 MB to prevent crashes
@@ -156,7 +159,7 @@ def get_language_prompt(language):
 
 # Configure Gemini API
 def configure_gemini_api():
-    api_key = os.getenv('GEMINI_API_KEY', 'AIzaSyAVZplhy0HEqwP2VvvlNRyfykYBLk3xrFU')
+    api_key = os.getenv('GEMINI_API_KEY', 'AIzaSyDBHb0TxrV7nrIZ3bAgi1YCWrMoLPBQPq8')
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-2.5-flash")
