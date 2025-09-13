@@ -35,6 +35,9 @@
                     <button type="button" class="btn btn-sm btn-outline-light" id="stopTTS" onclick="stopSpeaking()" title="Stop voice" style="display:none;">
                         <i class="fas fa-stop"></i>
                     </button>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="testVoice()" title="Test voice">
+                        <i class="fas fa-volume-up"></i>
+                    </button>
                 </div>
             </div>
         </div>
@@ -833,11 +836,20 @@ function speakText(text) {
 }
 
 function speakMultilingual(text) {
-    if (!('speechSynthesis' in window)) return;
+    if (!('speechSynthesis' in window)) {
+        console.error('Speech synthesis not supported in this browser');
+        return;
+    }
+    
+    console.log('Starting TTS for text:', text.substring(0, 100) + '...');
+    
     try { window.speechSynthesis.cancel(); } catch (e) {}
     const parts = splitByLanguage(text);
     console.log('Text parts for TTS:', parts);
-    if (parts.length === 0) return;
+    if (parts.length === 0) {
+        console.warn('No text parts to speak');
+        return;
+    }
     const queue = parts.map(p => {
         // Clean punctuation and excessive whitespace for smoother speech
         const cleaned = (p.text || '')
@@ -888,14 +900,19 @@ function speakMultilingual(text) {
     for (let i = 0; i < queue.length; i++) {
         const u = queue[i];
         u.onend = () => {
+            console.log('TTS utterance ended');
             if (i === queue.length - 1) {
                 ttsSpeaking = false; if (btn1) btn1.style.display = 'none'; if (btn2) btn2.style.display = 'none';
             }
         };
-        u.onerror = () => {
+        u.onerror = (event) => {
+            console.error('TTS error:', event.error, event);
             if (i === queue.length - 1) {
                 ttsSpeaking = false; if (btn1) btn1.style.display = 'none'; if (btn2) btn2.style.display = 'none';
             }
+        };
+        u.onstart = () => {
+            console.log('TTS utterance started');
         };
         window.speechSynthesis.speak(u);
     }
@@ -909,6 +926,31 @@ function stopSpeaking() {
     if (btn1) btn1.style.display = 'none';
     const btn2 = document.getElementById('stopResponse');
     if (btn2) btn2.style.display = 'none';
+}
+
+// Test voice functionality
+function testVoice() {
+    if (!('speechSynthesis' in window)) {
+        console.error('Speech synthesis not supported');
+        alert('Speech synthesis not supported in this browser');
+        return;
+    }
+    
+    const voices = window.speechSynthesis.getVoices();
+    console.log('Available voices:', voices);
+    
+    if (voices.length === 0) {
+        console.warn('No voices available');
+        alert('No voices available. Please check your browser settings.');
+        return;
+    }
+    
+    const utterance = new SpeechSynthesisUtterance('Hello, this is a voice test');
+    utterance.onstart = () => console.log('Test voice started');
+    utterance.onend = () => console.log('Test voice ended');
+    utterance.onerror = (event) => console.error('Test voice error:', event);
+    
+    window.speechSynthesis.speak(utterance);
 }
 
 function startNewChat() {

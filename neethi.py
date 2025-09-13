@@ -161,11 +161,15 @@ def get_language_prompt(language):
 def configure_gemini_api():
     api_key = os.getenv('GEMINI_API_KEY', 'AIzaSyDBHb0TxrV7nrIZ3bAgi1YCWrMoLPBQPq8')
     try:
+        if not api_key:
+            app.logger.error("GEMINI_API_KEY not found in environment variables")
+            return None
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-2.5-flash")
+        app.logger.info("Gemini API configured successfully")
         return model
     except Exception as e:
-        print(f"Error configuring Gemini API: {str(e)}")
+        app.logger.error(f"Error configuring Gemini API: {str(e)}")
         return None
 
 # Initialize Gemini model
@@ -1221,7 +1225,11 @@ Answer clearly and helpfully. If citing laws/sections, be precise. Keep it user-
         })
     
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"Chat API error: {str(e)}")
+        app.logger.error(f"Error type: {type(e).__name__}")
+        import traceback
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({'error': 'Sorry, I encountered an error. Please try again.'}), 500
 
 @app.route('/api/chat/history')
 @login_required
