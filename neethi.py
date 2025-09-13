@@ -1318,6 +1318,15 @@ def export_chats():
         })
     return jsonify({'chats': export})
 
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Render"""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'database': 'connected' if os.getenv('DATABASE_URL') else 'not_connected'
+    })
+
 # Additional API Routes
 @app.route('/api/upload/document', methods=['POST'])
 @login_required
@@ -1532,12 +1541,13 @@ if __name__ == '__main__':
     
     if is_production:
         print("🚀 Starting NeethiAI in Production Mode...")
+        print(f"🌐 Binding to host: 0.0.0.0, port: {port}")
         # Use waitress for production (Windows compatible)
         from waitress import serve
-        serve(app, host='0.0.0.0', port=port)
+        serve(app, host='0.0.0.0', port=port, threads=4)
     else:
         print("🚀 Starting NeethiAI Flask Application...")
-        print("📱 Open your browser and go to: http://localhost:5000")
+        print(f"📱 Open your browser and go to: http://localhost:{port}")
         # Run without auto-reloader to avoid upload interruptions
         app.run(debug=False, host='0.0.0.0', port=port, use_reloader=False)
 
