@@ -4,16 +4,11 @@ nixPkgs = ["python311", "pip"]
 [phases.install]
 cmds = [
     "pip install --upgrade pip",
-    "pip install --no-cache-dir --find-links https://download.pytorch.org/whl/torch_stable.html torch torchvision",
-    "pip install --no-cache-dir -r requirements.txt"
+    "pip install -r requirements.txt"
 ]
 
 [phases.build]
-cmds = [
-    "echo 'Build phase completed'",
-    "python -c 'import torch; print(f\"PyTorch version: {torch.__version__}\")'",
-    "python -c 'import easyocr; print(\"EasyOCR imported successfully\")'"
-]
+cmds = ["echo 'Build phase completed'"]
 
 [start]
 cmd = "python neethi.py"
