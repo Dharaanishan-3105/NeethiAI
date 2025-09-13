@@ -1542,17 +1542,17 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"⚠️  Database connection failed: {e}")
         if is_production:
-            print("❌ Cannot start in production without database connection!")
-            exit(1)
+            print("⚠️  Starting in production mode with limited functionality...")
+            print("💡 Database will be available when connection is restored")
         else:
             print("⚠️  Continuing in development mode without database...")
     
     if is_production:
         print("🚀 Starting NeethiAI in Production Mode...")
         print(f"🌐 Binding to host: 0.0.0.0, port: {port}")
-        # Use waitress for production with better mobile support
+        # Use waitress for production (stable configuration)
         from waitress import serve
-        serve(app, host='0.0.0.0', port=port, threads=6, connection_limit=1000, cleanup_interval=30)
+        serve(app, host='0.0.0.0', port=port, threads=4)
     else:
         print("🚀 Starting NeethiAI Flask Application...")
         print(f"📱 Open your browser and go to: http://localhost:{port}")
