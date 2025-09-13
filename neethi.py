@@ -1550,9 +1550,9 @@ if __name__ == '__main__':
     if is_production:
         print("🚀 Starting NeethiAI in Production Mode...")
         print(f"🌐 Binding to host: 0.0.0.0, port: {port}")
-        # Use waitress for production (Windows compatible)
+        # Use waitress for production with better mobile support
         from waitress import serve
-        serve(app, host='0.0.0.0', port=port, threads=4)
+        serve(app, host='0.0.0.0', port=port, threads=6, connection_limit=1000, cleanup_interval=30)
     else:
         print("🚀 Starting NeethiAI Flask Application...")
         print(f"📱 Open your browser and go to: http://localhost:{port}")

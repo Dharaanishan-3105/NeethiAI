@@ -5,7 +5,15 @@
 {% block content %}
 <div class="chat-container">
     <!-- Sidebar -->
-    <div class="sidebar">
+    <!-- Mobile menu button -->
+    <button class="mobile-menu-btn" onclick="toggleSidebar()" style="display: none;">
+        <i class="fas fa-bars"></i>
+    </button>
+    
+    <!-- Sidebar overlay for mobile -->
+    <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+    
+    <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <button class="new-chat-btn" onclick="startNewChat()">
                 <i class="fas fa-plus"></i>
@@ -23,8 +31,8 @@
         <div class="chat-header">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
                 <div>
-                    <h1>NeethiAI</h1>
-                    <p>Your Legal AI Assistant</p>
+            <h1>NeethiAI</h1>
+            <p>Your Legal AI Assistant</p>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
                     <div class="btn-group" role="group" aria-label="Language toggle">
@@ -408,15 +416,57 @@
 
 @media (max-width: 768px) {
     .sidebar {
-        display: none;
+        position: fixed;
+        top: 0;
+        left: -300px;
+        width: 280px;
+        height: 100vh;
+        z-index: 1000;
+        transition: left 0.3s ease;
+        background: #1a1a1a;
+        border-right: 1px solid #4d4d4f;
+    }
+    
+    .sidebar.open {
+        left: 0;
     }
     
     .chat-messages {
         padding: 1rem;
+        margin-left: 0;
     }
     
     .chat-input-container {
         padding: 1rem;
+    }
+    
+    .mobile-menu-btn {
+        display: block !important;
+        position: fixed;
+        top: 1rem;
+        left: 1rem;
+        z-index: 1001;
+        background: #2d2d2d;
+        border: 1px solid #4d4d4f;
+        color: #ffffff;
+        padding: 0.5rem;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+    
+    .sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+        display: none;
+    }
+    
+    .sidebar-overlay.open {
+        display: block;
     }
 }
 </style>
@@ -841,6 +891,22 @@ function speakMultilingual(text) {
         return;
     }
     
+    // Check if we're on mobile and handle accordingly
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+        console.log('Mobile device detected, using simplified TTS');
+        // For mobile, use a simpler approach
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        utterance.onstart = () => console.log('Mobile TTS started');
+        utterance.onend = () => console.log('Mobile TTS ended');
+        utterance.onerror = (event) => console.error('Mobile TTS error:', event);
+        window.speechSynthesis.speak(utterance);
+        return;
+    }
+    
     console.log('Starting TTS for text:', text.substring(0, 100) + '...');
     
     try { window.speechSynthesis.cancel(); } catch (e) {}
@@ -951,6 +1017,33 @@ function testVoice() {
     utterance.onerror = (event) => console.error('Test voice error:', event);
     
     window.speechSynthesis.speak(utterance);
+}
+
+// Mobile sidebar functions
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    
+    if (sidebar.classList.contains('open')) {
+        closeSidebar();
+    } else {
+        sidebar.classList.add('open');
+        overlay.classList.add('open');
+    }
+}
+
+function closeSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    
+    sidebar.classList.remove('open');
+    overlay.classList.remove('open');
+}
+
+// Close sidebar when clicking on chat history items
+function loadChat(chatId) {
+    closeSidebar(); // Close mobile sidebar
+    // ... existing loadChat code ...
 }
 
 function startNewChat() {
