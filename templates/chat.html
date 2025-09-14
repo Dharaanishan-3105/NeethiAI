@@ -10,6 +10,11 @@
         <i class="fas fa-bars"></i>
     </button>
     
+    <!-- Mobile Stop Voice Button -->
+    <button id="stopResponse" onclick="stopTTS()" style="display: none;" class="btn-stop-response">
+        <i class="fas fa-stop"></i> Stop
+    </button>
+    
     <!-- Sidebar overlay for mobile -->
     <div class="sidebar-overlay" onclick="closeSidebar()"></div>
     
@@ -93,6 +98,9 @@
                         <span class="voice-bar"></span>
                         <span class="voice-bar"></span>
                     </div>
+                    <button id="stopTTS" onclick="stopTTS()" style="display: none;" title="Stop Voice" class="btn-stop-tts">
+                        <i class="fas fa-stop"></i>
+                    </button>
                     <button id="sendButton" onclick="sendMessage()" disabled>
                         <i class="fas fa-paper-plane"></i>
                     </button>
@@ -468,6 +476,28 @@
         justify-content: center;
         flex-shrink: 0; /* Don't shrink */
         margin-left: 0.5rem;
+    }
+    
+    /* Mobile stop button visibility */
+    .btn-stop-tts, .btn-stop-response {
+        display: inline-block !important;
+        position: fixed;
+        top: 0.3rem;
+        right: 0.3rem;
+        z-index: 1002;
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 0.3rem 0.6rem;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+        min-width: 60px;
+        height: 32px;
+    }
+    
+    .btn-stop-tts:hover, .btn-stop-response:hover {
+        background: #c82333;
     }
     
     .mobile-menu-btn {
@@ -969,8 +999,14 @@ function speakMultilingual(text) {
             ttsSpeaking = true;
             const btn1 = document.getElementById('stopTTS');
             const btn2 = document.getElementById('stopResponse');
-            if (btn1) btn1.style.display = 'inline-block';
-            if (btn2) btn2.style.display = 'inline-block';
+            if (btn1) {
+                btn1.style.display = 'inline-block';
+                btn1.style.visibility = 'visible';
+            }
+            if (btn2) {
+                btn2.style.display = 'inline-block';
+                btn2.style.visibility = 'visible';
+            }
         };
         
         utterance.onend = () => {
@@ -978,8 +1014,14 @@ function speakMultilingual(text) {
             ttsSpeaking = false;
             const btn1 = document.getElementById('stopTTS');
             const btn2 = document.getElementById('stopResponse');
-            if (btn1) btn1.style.display = 'none';
-            if (btn2) btn2.style.display = 'none';
+            if (btn1) {
+                btn1.style.display = 'none';
+                btn1.style.visibility = 'hidden';
+            }
+            if (btn2) {
+                btn2.style.display = 'none';
+                btn2.style.visibility = 'hidden';
+            }
         };
         
         utterance.onerror = (event) => {
@@ -987,8 +1029,14 @@ function speakMultilingual(text) {
             ttsSpeaking = false;
             const btn1 = document.getElementById('stopTTS');
             const btn2 = document.getElementById('stopResponse');
-            if (btn1) btn1.style.display = 'none';
-            if (btn2) btn2.style.display = 'none';
+            if (btn1) {
+                btn1.style.display = 'none';
+                btn1.style.visibility = 'hidden';
+            }
+            if (btn2) {
+                btn2.style.display = 'none';
+                btn2.style.visibility = 'hidden';
+            }
             
             // Try fallback with English
             if (utterance.lang !== 'en-US') {
