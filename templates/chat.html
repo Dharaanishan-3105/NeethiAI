@@ -102,7 +102,7 @@
                     <button id="stopTTS" onclick="stopTTS()" style="display: none;" title="Stop Voice" class="btn-stop-tts">
                         <i class="fas fa-stop"></i>
                     </button>
-                    <button id="sendButton" onclick="sendMessage()" disabled>
+                    <button id="sendButton" class="btn-send" onclick="sendMessage()" disabled>
                         <i class="fas fa-paper-plane"></i>
                     </button>
                 </div>
@@ -468,14 +468,26 @@
         overflow: hidden;
     }
     
-    .btn-send {
+    .btn-send, #sendButton {
         min-width: 50px;
         height: 40px;
-        display: flex;
+        display: flex !important;
         align-items: center;
         justify-content: center;
         flex-shrink: 0; /* Don't shrink */
         margin-left: 0.25rem;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+    
+    .btn-send:disabled, #sendButton:disabled {
+        background: #6c757d;
+        cursor: not-allowed;
     }
     
     /* Mobile stop button visibility - only show when speaking */
@@ -1338,6 +1350,20 @@ function startNewChat() {
 document.addEventListener('DOMContentLoaded', function() {
     // Load chat history if needed
     loadChatHistory();
+    
+    // Debug: Check if send button is visible
+    const sendButton = document.getElementById('sendButton');
+    console.log('Send button found:', sendButton);
+    console.log('Send button display:', window.getComputedStyle(sendButton).display);
+    console.log('Send button visibility:', window.getComputedStyle(sendButton).visibility);
+    console.log('Send button opacity:', window.getComputedStyle(sendButton).opacity);
+    
+    // Force show send button
+    if (sendButton) {
+        sendButton.style.display = 'flex';
+        sendButton.style.visibility = 'visible';
+        sendButton.style.opacity = '1';
+    }
 });
 
 function handleFileUpload() {
