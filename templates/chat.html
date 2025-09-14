@@ -456,16 +456,54 @@
         max-width: 100%;
         display: flex;
         align-items: center;
+        justify-content: space-between; /* Ensure proper spacing */
+    }
+    
+    /* Mobile-specific input group */
+    @media (max-width: 768px) {
+        .input-group {
+            width: 100%;
+            min-width: 0; /* Allow shrinking */
+        }
     }
     
     .form-control, #messageInput {
         font-size: 16px; /* Prevent zoom on iOS */
         flex: 1;
         min-width: 0; /* Allow shrinking */
-        max-width: calc(100% - 120px); /* Leave space for buttons */
-        width: 100%;
+        max-width: calc(100% - 150px); /* More space for buttons on mobile */
+        width: calc(100% - 150px); /* Fixed width to ensure send button is visible */
         resize: none;
         overflow: hidden;
+    }
+    
+    /* Mobile-specific input sizing */
+    @media (max-width: 768px) {
+        .form-control, #messageInput {
+            max-width: calc(100% - 180px); /* Much more space on mobile */
+            width: calc(100% - 180px); /* Fixed width for mobile */
+            font-size: 16px; /* Prevent zoom */
+            flex-shrink: 1; /* Allow shrinking */
+        }
+        
+        .btn-send, #sendButton {
+            min-width: 45px; /* Slightly smaller on mobile */
+            height: 40px;
+            flex-shrink: 0; /* Never shrink */
+            margin-left: 0.5rem;
+        }
+        
+        #voiceButton {
+            min-width: 40px; /* Smaller voice button */
+            height: 40px;
+            flex-shrink: 0; /* Never shrink */
+        }
+        
+        #fileButton {
+            min-width: 40px; /* Smaller file button */
+            height: 40px;
+            flex-shrink: 0; /* Never shrink */
+        }
     }
     
     .btn-send, #sendButton {
