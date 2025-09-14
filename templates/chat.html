@@ -1009,19 +1009,24 @@ function speakMultilingual(text) {
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
         
-        // Better language detection
-        const tamilWords = ['தமிழ்', 'சட்டம்', 'நீதி', 'குற்றம்', 'தண்டனை', 'நீதிமன்றம்', 'வழக்கு', 'சட்டவிரோத', 'நீதிபதி', 'வழக்கறிஞர்'];
+        // Enhanced language detection
+        const tamilWords = ['தமிழ்', 'சட்டம்', 'நீதி', 'குற்றம்', 'தண்டனை', 'நீதிமன்றம்', 'வழக்கு', 'சட்டவிரோத', 'நீதிபதி', 'வழக்கறிஞர்', 'தமிழ்', 'சட்டம்', 'நீதி', 'குற்றம்', 'தண்டனை'];
         const hasTamil = tamilWords.some(word => text.includes(word));
         
         // Check if user selected Tamil language
         const languageToggle = document.querySelector('.language-toggle .active');
         const isTamilSelected = languageToggle && languageToggle.textContent.includes('TA');
         
+        // Force Tamil if Tamil words detected or Tamil selected
         if (hasTamil || isTamilSelected) {
             utterance.lang = 'ta-IN'; // Tamil
+            utterance.rate = 0.8; // Slower for Tamil
+            utterance.pitch = 1.0;
             console.log('Using Tamil voice - Tamil words detected or Tamil selected');
         } else {
             utterance.lang = 'en-US'; // English
+            utterance.rate = 1.0; // Normal speed for English
+            utterance.pitch = 1.0;
             console.log('Using English voice');
         }
         
@@ -1115,18 +1120,23 @@ function speakMultilingual(text) {
             window.speechSynthesis.speak(utterance);
             console.log('Mobile TTS speak command sent');
             
-            // Fallback if no speech starts within 2 seconds
-            setTimeout(() => {
-                if (!ttsSpeaking) {
-                    console.log('TTS did not start, trying fallback');
+            // Multiple fallback attempts for better reliability
+            let fallbackAttempts = 0;
+            const maxFallbacks = 3;
+            
+            const tryFallback = () => {
+                if (!ttsSpeaking && fallbackAttempts < maxFallbacks) {
+                    fallbackAttempts++;
+                    console.log(`TTS fallback attempt ${fallbackAttempts}/${maxFallbacks}`);
+                    
                     const fallbackUtterance = new SpeechSynthesisUtterance(cleanText);
-                    fallbackUtterance.lang = 'en-US';
+                    fallbackUtterance.lang = 'en-US'; // Always use English for fallback
                     fallbackUtterance.rate = 1.0;
                     fallbackUtterance.pitch = 1.0;
                     fallbackUtterance.volume = 1.0;
                     
                     fallbackUtterance.onstart = () => {
-                        console.log('Fallback TTS started');
+                        console.log(`Fallback TTS ${fallbackAttempts} started`);
                         ttsSpeaking = true;
                         const btn1 = document.getElementById('stopTTS');
                         const btn2 = document.getElementById('stopResponse');
@@ -1135,7 +1145,7 @@ function speakMultilingual(text) {
                     };
                     
                     fallbackUtterance.onend = () => {
-                        console.log('Fallback TTS ended');
+                        console.log(`Fallback TTS ${fallbackAttempts} ended`);
                         ttsSpeaking = false;
                         const btn1 = document.getElementById('stopTTS');
                         const btn2 = document.getElementById('stopResponse');
@@ -1143,13 +1153,28 @@ function speakMultilingual(text) {
                         if (btn2) btn2.classList.remove('speaking');
                     };
                     
+                    fallbackUtterance.onerror = (e) => {
+                        console.error(`Fallback TTS ${fallbackAttempts} error:`, e);
+                        if (fallbackAttempts < maxFallbacks) {
+                            setTimeout(tryFallback, 1000);
+                        }
+                    };
+                    
                     try {
                         window.speechSynthesis.speak(fallbackUtterance);
                     } catch (e) {
-                        console.error('Fallback TTS failed:', e);
+                        console.error(`Fallback TTS ${fallbackAttempts} failed:`, e);
+                        if (fallbackAttempts < maxFallbacks) {
+                            setTimeout(tryFallback, 1000);
+                        }
                     }
                 }
-            }, 2000);
+            };
+            
+            // Try fallback after 1 second, then 2 seconds, then 3 seconds
+            setTimeout(tryFallback, 1000);
+            setTimeout(tryFallback, 2000);
+            setTimeout(tryFallback, 3000);
             
         } catch (error) {
             console.error('Failed to start mobile TTS:', error);
@@ -1422,11 +1447,23 @@ function handleFileUpload() {
                 const message = `📷 <strong>Fake Notice Analysis</strong><br>${(data.result||'No result')}<br>${sourcesHtml}`;
                 addMessage(message, 'assistant');
                 lastResponse = data.result || '';
+                
+                // Voice output for fake notice analysis
+                if (lastResponse) {
+                    console.log('Speaking fake notice analysis result');
+                    speakMultilingual(lastResponse);
+                }
             } else {
                 const sourcesHtml = (data.sources && data.sources.length) ? `\n\n<strong>Sources:</strong><br>${data.sources.map(s=>`<a href="${s}" target="_blank">${s}</a>`).join('<br>')}` : '';
                 const message = `📄 <strong>Document Summary</strong><br>${(data.summary||'No summary')}<br>${sourcesHtml}`;
                 addMessage(message, 'assistant');
                 lastResponse = data.summary || '';
+                
+                // Voice output for document summary
+                if (lastResponse) {
+                    console.log('Speaking document summary');
+                    speakMultilingual(lastResponse);
+                }
             }
             if (lastResponse) {
                 document.getElementById('playResponse').style.display = 'inline-block';

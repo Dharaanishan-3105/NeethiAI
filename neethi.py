@@ -159,7 +159,7 @@ def get_language_prompt(language):
 
 # Configure Gemini API
 def configure_gemini_api():
-    api_key = os.getenv('GEMINI_API_KEY', 'AIzaSyDBHb0TxrV7nrIZ3bAgi1YCWrMoLPBQPq8')
+    api_key = os.getenv('GEMINI_API_KEY', 'AIzaSyCjwLNN0prbAay-JhjWMWljZDTlj36DaLw')
     try:
         if not api_key:
             app.logger.error("GEMINI_API_KEY not found in environment variables")
@@ -1454,8 +1454,20 @@ def detect_fake_notice_api():
             app.logger.error(f'Unsupported file type: {file.filename}')
             return jsonify({'error': 'Unsupported file type'}), 400
         
-        result = detect_fake_notice(text)
-        sources = get_legal_sources("fake legal notice")
+        app.logger.info(f'Extracted text length: {len(text) if text else 0}')
+        app.logger.info(f'Extracted text preview: {text[:200] if text else "No text"}')
+        
+        if not text or len(text.strip()) < 5:
+            app.logger.warning('Very little text extracted from image')
+            result = "⚠️ **Unable to extract sufficient text from the image.**\n\n**Possible reasons:**\n- Image quality is too low\n- Text is too small or blurry\n- Image format not supported\n- No text present in image\n\n**Please try:**\n- Using a higher quality image\n- Ensuring text is clearly visible\n- Using JPG, PNG, or PDF format"
+            sources = []
+        else:
+            result = detect_fake_notice(text)
+            try:
+                sources = get_legal_sources("fake legal notice")
+            except Exception as e:
+                app.logger.warning(f'Failed to get legal sources: {e}')
+                sources = []
         
         # Save analysis to chat history
         try:
@@ -1470,7 +1482,9 @@ def detect_fake_notice_api():
             db.session.add(saved)
             db.session.commit()
             chat_id = saved.id
-        except Exception:
+            app.logger.info(f'Fake notice analysis saved with chat_id: {chat_id}')
+        except Exception as e:
+            app.logger.error(f'Failed to save fake notice analysis: {e}')
             chat_id = None
 
         return jsonify({
