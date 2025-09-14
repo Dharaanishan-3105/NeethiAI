@@ -453,22 +453,25 @@
     .input-group {
         flex-wrap: nowrap;
         max-width: 100%;
+        display: flex;
+        align-items: center;
     }
     
     .form-control {
         font-size: 16px; /* Prevent zoom on iOS */
         flex: 1;
         min-width: 0; /* Allow shrinking */
+        max-width: calc(100% - 120px); /* Leave space for buttons */
     }
     
     .btn-send {
-        min-width: 60px;
+        min-width: 50px;
         height: 40px;
         display: flex;
         align-items: center;
         justify-content: center;
         flex-shrink: 0; /* Don't shrink */
-        margin-left: 0.5rem;
+        margin-left: 0.25rem;
     }
     
     /* Mobile stop button visibility - only show when speaking */
@@ -978,17 +981,21 @@ function speakMultilingual(text) {
         
         // Create utterance
         const utterance = new SpeechSynthesisUtterance(cleanText);
-        utterance.rate = 0.8; // Slower for mobile
+        utterance.rate = 0.9; // Slightly faster for mobile
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
         
-        // Try to detect language and set accordingly
-        const tamilWords = ['தமிழ்', 'சட்டம்', 'நீதி', 'குற்றம்', 'தண்டனை', 'நீதிமன்றம்', 'வழக்கு', 'சட்டவிரோத', 'நீதிபதி', 'வழக்கறிஞர்'];
+        // Better language detection
+        const tamilWords = ['தமிழ்', 'சட்டம்', 'நீதி', 'குற்றம்', 'தண்டனை', 'நீதிமன்றம்', 'வழக்கு', 'சட்டவிரோத', 'நீதிபதி', 'வழக்கறிஞர்', 'தமிழ்', 'சட்டம்', 'நீதி'];
         const hasTamil = tamilWords.some(word => text.includes(word));
         
-        if (hasTamil) {
+        // Check if user selected Tamil language
+        const languageToggle = document.querySelector('.language-toggle .active');
+        const isTamilSelected = languageToggle && languageToggle.textContent.includes('TA');
+        
+        if (hasTamil || isTamilSelected) {
             utterance.lang = 'ta-IN'; // Tamil
-            console.log('Using Tamil voice for text containing Tamil words');
+            console.log('Using Tamil voice - Tamil words detected or Tamil selected');
         } else {
             utterance.lang = 'en-US'; // English
             console.log('Using English voice');
@@ -1036,35 +1043,46 @@ function speakMultilingual(text) {
             // Try fallback with English if Tamil failed
             if (utterance.lang !== 'en-US') {
                 console.log('Tamil voice failed, trying fallback with English');
-                const fallbackUtterance = new SpeechSynthesisUtterance(cleanText);
-                fallbackUtterance.lang = 'en-US';
-                fallbackUtterance.rate = 0.8;
-                fallbackUtterance.pitch = 1.0;
-                fallbackUtterance.volume = 1.0;
-                
-                fallbackUtterance.onstart = () => {
-                    console.log('Fallback English TTS started');
-                    ttsSpeaking = true;
-                    const btn1 = document.getElementById('stopTTS');
-                    const btn2 = document.getElementById('stopResponse');
-                    if (btn1) btn1.classList.add('speaking');
-                    if (btn2) btn2.classList.add('speaking');
-                };
-                
-                fallbackUtterance.onend = () => {
-                    console.log('Fallback English TTS ended');
-                    ttsSpeaking = false;
-                    const btn1 = document.getElementById('stopTTS');
-                    const btn2 = document.getElementById('stopResponse');
-                    if (btn1) btn1.classList.remove('speaking');
-                    if (btn2) btn2.classList.remove('speaking');
-                };
-                
-                try {
-                    window.speechSynthesis.speak(fallbackUtterance);
-                } catch (e) {
-                    console.error('Fallback TTS also failed:', e);
-                }
+                setTimeout(() => {
+                    const fallbackUtterance = new SpeechSynthesisUtterance(cleanText);
+                    fallbackUtterance.lang = 'en-US';
+                    fallbackUtterance.rate = 0.9;
+                    fallbackUtterance.pitch = 1.0;
+                    fallbackUtterance.volume = 1.0;
+                    
+                    fallbackUtterance.onstart = () => {
+                        console.log('Fallback English TTS started');
+                        ttsSpeaking = true;
+                        const btn1 = document.getElementById('stopTTS');
+                        const btn2 = document.getElementById('stopResponse');
+                        if (btn1) btn1.classList.add('speaking');
+                        if (btn2) btn2.classList.add('speaking');
+                    };
+                    
+                    fallbackUtterance.onend = () => {
+                        console.log('Fallback English TTS ended');
+                        ttsSpeaking = false;
+                        const btn1 = document.getElementById('stopTTS');
+                        const btn2 = document.getElementById('stopResponse');
+                        if (btn1) btn1.classList.remove('speaking');
+                        if (btn2) btn2.classList.remove('speaking');
+                    };
+                    
+                    fallbackUtterance.onerror = (e) => {
+                        console.error('Fallback TTS also failed:', e);
+                        ttsSpeaking = false;
+                        const btn1 = document.getElementById('stopTTS');
+                        const btn2 = document.getElementById('stopResponse');
+                        if (btn1) btn1.classList.remove('speaking');
+                        if (btn2) btn2.classList.remove('speaking');
+                    };
+                    
+                    try {
+                        window.speechSynthesis.speak(fallbackUtterance);
+                    } catch (e) {
+                        console.error('Fallback TTS also failed:', e);
+                    }
+                }, 100);
             }
         };
         
@@ -1155,13 +1173,31 @@ function speakMultilingual(text) {
 }
 
 function stopSpeaking() {
+    console.log('Stop speaking called');
     if (!('speechSynthesis' in window)) return;
-    try { window.speechSynthesis.cancel(); } catch (e) {}
+    try { 
+        window.speechSynthesis.cancel(); 
+        console.log('Speech synthesis cancelled');
+    } catch (e) {
+        console.error('Error cancelling speech:', e);
+    }
     ttsSpeaking = false;
     const btn1 = document.getElementById('stopTTS');
-    if (btn1) btn1.style.display = 'none';
+    if (btn1) {
+        btn1.style.display = 'none';
+        btn1.classList.remove('speaking');
+    }
     const btn2 = document.getElementById('stopResponse');
-    if (btn2) btn2.style.display = 'none';
+    if (btn2) {
+        btn2.style.display = 'none';
+        btn2.classList.remove('speaking');
+    }
+    console.log('Stop speaking completed');
+}
+
+function stopTTS() {
+    console.log('Stop TTS called');
+    stopSpeaking();
 }
 
 // Test voice functionality
