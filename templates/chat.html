@@ -84,6 +84,7 @@
                     </button>
                     <textarea 
                         id="messageInput" 
+                        class="form-control"
                         placeholder="Ask me anything about Indian law..." 
                         rows="1"
                         maxlength="4000"
@@ -457,11 +458,14 @@
         align-items: center;
     }
     
-    .form-control {
+    .form-control, #messageInput {
         font-size: 16px; /* Prevent zoom on iOS */
         flex: 1;
         min-width: 0; /* Allow shrinking */
         max-width: calc(100% - 120px); /* Leave space for buttons */
+        width: 100%;
+        resize: none;
+        overflow: hidden;
     }
     
     .btn-send {
@@ -966,6 +970,9 @@ function speakMultilingual(text) {
         return;
     }
     
+    // For desktop, use the existing TTS system
+    console.log('Desktop TTS - using existing system');
+    
     function speakMobileText(text) {
         console.log('Starting mobile TTS for:', text.substring(0, 50) + '...');
         
@@ -979,14 +986,19 @@ function speakMultilingual(text) {
         // Clean text for mobile
         const cleanText = text.replace(/[#*.,;:!?()[\]{}'"]/g, ' ').replace(/\s+/g, ' ').trim();
         
+        if (!cleanText) {
+            console.log('No text to speak');
+            return;
+        }
+        
         // Create utterance
         const utterance = new SpeechSynthesisUtterance(cleanText);
-        utterance.rate = 0.9; // Slightly faster for mobile
+        utterance.rate = 1.0; // Normal speed
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
         
         // Better language detection
-        const tamilWords = ['தமிழ்', 'சட்டம்', 'நீதி', 'குற்றம்', 'தண்டனை', 'நீதிமன்றம்', 'வழக்கு', 'சட்டவிரோத', 'நீதிபதி', 'வழக்கறிஞர்', 'தமிழ்', 'சட்டம்', 'நீதி'];
+        const tamilWords = ['தமிழ்', 'சட்டம்', 'நீதி', 'குற்றம்', 'தண்டனை', 'நீதிமன்றம்', 'வழக்கு', 'சட்டவிரோத', 'நீதிபதி', 'வழக்கறிஞர்'];
         const hasTamil = tamilWords.some(word => text.includes(word));
         
         // Check if user selected Tamil language
@@ -1090,6 +1102,43 @@ function speakMultilingual(text) {
         try {
             window.speechSynthesis.speak(utterance);
             console.log('Mobile TTS speak command sent');
+            
+            // Fallback if no speech starts within 2 seconds
+            setTimeout(() => {
+                if (!ttsSpeaking) {
+                    console.log('TTS did not start, trying fallback');
+                    const fallbackUtterance = new SpeechSynthesisUtterance(cleanText);
+                    fallbackUtterance.lang = 'en-US';
+                    fallbackUtterance.rate = 1.0;
+                    fallbackUtterance.pitch = 1.0;
+                    fallbackUtterance.volume = 1.0;
+                    
+                    fallbackUtterance.onstart = () => {
+                        console.log('Fallback TTS started');
+                        ttsSpeaking = true;
+                        const btn1 = document.getElementById('stopTTS');
+                        const btn2 = document.getElementById('stopResponse');
+                        if (btn1) btn1.classList.add('speaking');
+                        if (btn2) btn2.classList.add('speaking');
+                    };
+                    
+                    fallbackUtterance.onend = () => {
+                        console.log('Fallback TTS ended');
+                        ttsSpeaking = false;
+                        const btn1 = document.getElementById('stopTTS');
+                        const btn2 = document.getElementById('stopResponse');
+                        if (btn1) btn1.classList.remove('speaking');
+                        if (btn2) btn2.classList.remove('speaking');
+                    };
+                    
+                    try {
+                        window.speechSynthesis.speak(fallbackUtterance);
+                    } catch (e) {
+                        console.error('Fallback TTS failed:', e);
+                    }
+                }
+            }, 2000);
+            
         } catch (error) {
             console.error('Failed to start mobile TTS:', error);
         }
@@ -1337,6 +1386,8 @@ function handleFileUpload() {
     })
     .then(data => {
         hideLoading();
+        console.log('File upload response:', data);
+        
         if (data.error) {
             addMessage('Sorry, I encountered an error: ' + data.error, 'assistant');
         } else {
