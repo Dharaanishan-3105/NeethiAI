@@ -434,44 +434,57 @@
     .chat-messages {
         padding: 1rem;
         margin-left: 0;
+        padding-bottom: 120px; /* Space for fixed input */
     }
     
     .chat-input-container {
         padding: 1rem;
         padding-bottom: 2rem; /* Extra space for mobile keyboard */
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        border-top: 1px solid #e0e0e0;
+        z-index: 1000;
     }
     
     .input-group {
         flex-wrap: nowrap;
-    }
-    
-    .btn-send {
-        min-width: 50px;
-        height: 40px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        max-width: 100%;
     }
     
     .form-control {
         font-size: 16px; /* Prevent zoom on iOS */
+        flex: 1;
+        min-width: 0; /* Allow shrinking */
+    }
+    
+    .btn-send {
+        min-width: 60px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0; /* Don't shrink */
+        margin-left: 0.5rem;
     }
     
     .mobile-menu-btn {
         display: block !important;
         position: fixed;
-        top: 0.5rem;
-        left: 0.5rem;
+        top: 0.3rem;
+        left: 0.3rem;
         z-index: 1001;
         background: #2d2d2d;
         border: 1px solid #4d4d4f;
         color: #ffffff;
-        padding: 0.4rem;
-        border-radius: 6px;
+        padding: 0.2rem;
+        border-radius: 4px;
         cursor: pointer;
-        font-size: 14px;
-        width: 40px;
-        height: 40px;
+        font-size: 12px;
+        width: 32px;
+        height: 32px;
         display: flex !important;
         align-items: center;
         justify-content: center;
@@ -917,32 +930,42 @@ function speakMultilingual(text) {
     // Check if we're on mobile and handle accordingly
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     if (isMobile) {
-        console.log('Mobile device detected, using simplified TTS');
-        
-        // Wait for voices to load on mobile
-        if (window.speechSynthesis.getVoices().length === 0) {
-            window.speechSynthesis.addEventListener('voiceschanged', () => {
-                speakMobileText(text);
-            });
-            return;
-        }
-        
+        console.log('Mobile device detected, using mobile TTS');
         speakMobileText(text);
         return;
     }
     
     function speakMobileText(text) {
+        console.log('Starting mobile TTS for:', text.substring(0, 50) + '...');
+        
+        // Stop any current speech
+        try {
+            window.speechSynthesis.cancel();
+        } catch (e) {
+            console.log('No speech to cancel');
+        }
+        
         // Clean text for mobile
         const cleanText = text.replace(/[#*.,;:!?()[\]{}'"]/g, ' ').replace(/\s+/g, ' ').trim();
         
+        // Create utterance
         const utterance = new SpeechSynthesisUtterance(cleanText);
-        utterance.rate = 0.9; // Slightly slower for mobile
+        utterance.rate = 0.8; // Slower for mobile
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
-        utterance.lang = 'en-US'; // Default to English for mobile
         
+        // Try to detect language and set accordingly
+        if (text.includes('தமிழ்') || text.includes('சட்டம்') || text.includes('நீதி')) {
+            utterance.lang = 'ta-IN'; // Tamil
+            console.log('Using Tamil voice');
+        } else {
+            utterance.lang = 'en-US'; // English
+            console.log('Using English voice');
+        }
+        
+        // Event handlers
         utterance.onstart = () => {
-            console.log('Mobile TTS started');
+            console.log('Mobile TTS started successfully');
             ttsSpeaking = true;
             const btn1 = document.getElementById('stopTTS');
             const btn2 = document.getElementById('stopResponse');
@@ -951,7 +974,7 @@ function speakMultilingual(text) {
         };
         
         utterance.onend = () => {
-            console.log('Mobile TTS ended');
+            console.log('Mobile TTS ended successfully');
             ttsSpeaking = false;
             const btn1 = document.getElementById('stopTTS');
             const btn2 = document.getElementById('stopResponse');
@@ -960,15 +983,28 @@ function speakMultilingual(text) {
         };
         
         utterance.onerror = (event) => {
-            console.error('Mobile TTS error:', event);
+            console.error('Mobile TTS error:', event.error, event);
             ttsSpeaking = false;
             const btn1 = document.getElementById('stopTTS');
             const btn2 = document.getElementById('stopResponse');
             if (btn1) btn1.style.display = 'none';
             if (btn2) btn2.style.display = 'none';
+            
+            // Try fallback with English
+            if (utterance.lang !== 'en-US') {
+                console.log('Trying fallback with English');
+                utterance.lang = 'en-US';
+                window.speechSynthesis.speak(utterance);
+            }
         };
         
-        window.speechSynthesis.speak(utterance);
+        // Speak the text
+        try {
+            window.speechSynthesis.speak(utterance);
+            console.log('Mobile TTS speak command sent');
+        } catch (error) {
+            console.error('Failed to start mobile TTS:', error);
+        }
     }
     
     console.log('Starting TTS for text:', text.substring(0, 100) + '...');
