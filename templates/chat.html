@@ -1481,8 +1481,10 @@ function handleFileUpload() {
             addMessage('Sorry, I encountered an error: ' + data.error, 'assistant');
         } else {
             if (isImage) {
+                const risk = data.risk_level ? `<div><strong>Risk:</strong> ${data.risk_level} (Score: ${data.fraud_score||0}/100)</div>` : '';
+                const rec = data.recommendation ? `<div style="margin-top:6px"><strong>Recommendation:</strong> ${data.recommendation}</div>` : '';
                 const sourcesHtml = (data.sources && data.sources.length) ? `\n\n<strong>Sources:</strong><br>${data.sources.map(s=>`<a href="${s}" target="_blank">${s}</a>`).join('<br>')}` : '';
-                const message = `📷 <strong>Fake Notice Analysis</strong><br>${(data.result||'No result')}<br>${sourcesHtml}`;
+                const message = `📷 <strong>Fake Notice Analysis</strong><br>${(data.result||'No result')}<br>${risk}${rec}<br>${sourcesHtml}`;
                 addMessage(message, 'assistant');
                 lastResponse = data.result || '';
                 

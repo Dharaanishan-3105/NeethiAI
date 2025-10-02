@@ -4,7 +4,12 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.exceptions import RequestEntityTooLarge
 from authlib.integrations.flask_client import OAuth
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo  # Python 3.9+
+    _has_zoneinfo = True
+except Exception:
+    _has_zoneinfo = False
 import os
 import json
 import requests
@@ -93,6 +98,28 @@ google = oauth.register(
     client_kwargs={
         'scope': 'openid email profile'
     }
+)
+
+# Optional: GitHub OAuth
+github = oauth.register(
+    name='github',
+    client_id=os.getenv('GITHUB_CLIENT_ID'),
+    client_secret=os.getenv('GITHUB_CLIENT_SECRET'),
+    access_token_url='https://github.com/login/oauth/access_token',
+    authorize_url='https://github.com/login/oauth/authorize',
+    api_base_url='https://api.github.com/',
+    client_kwargs={'scope': 'read:user user:email'}
+)
+
+# Optional: LinkedIn OAuth
+linkedin = oauth.register(
+    name='linkedin',
+    client_id=os.getenv('LINKEDIN_CLIENT_ID'),
+    client_secret=os.getenv('LINKEDIN_CLIENT_SECRET'),
+    access_token_url='https://www.linkedin.com/oauth/v2/accessToken',
+    authorize_url='https://www.linkedin.com/oauth/v2/authorization',
+    api_base_url='https://api.linkedin.com/v2/',
+    client_kwargs={'scope': 'r_liteprofile r_emailaddress', 'token_endpoint_auth_method': 'client_secret_post'}
 )
 
 # Database Models
@@ -225,10 +252,10 @@ def extract_text_from_docx(file):
 def get_legal_sources(query, max_results=5):
     # National trusted sites
     national_sites = [
-        "site:indiankanoon.org",
-        "site:gov.in",
-        "site:prsindia.org",
-        "site:egazette.nic.in",
+        "site:indiankanoon.org", 
+        "site:gov.in", 
+        "site:prsindia.org", 
+        "site:egazette.nic.in", 
         "site:legislative.gov.in",
         "site:india.gov.in",
         "site:legalaffairs.gov.in",
@@ -430,6 +457,43 @@ Provide a clear, accurate answer about Indian law. If you mention specific laws 
     except Exception as e:
         return f"I encountered an error: {str(e)}. Please try again."
 
+# Creator tag handling
+def is_creator_query(user_text: str) -> bool:
+    if not user_text:
+        return False
+    text = user_text.lower().strip()
+    # Fast keyword hits
+    keywords = [
+        'who created you', 'who is your creator', 'creator of you', 'who made you',
+        'who developed you', 'developer of you', 'who built you',
+        'owner of you', 'who owns you', 'who is your owner',
+        'founder of neethi', 'which team created you', 'company behind you',
+        'who created neethi', 'who created neethi ai', 'who created neethiai',
+        'who developed neethi', 'who developed neethi ai', 'who developed neethiai',
+        'who built neethi', 'who built neethi ai', 'who built neethiai',
+        'who owns neethi', 'who owns neethi ai', 'who owns neethiai',
+        'which team developed neethi ai', 'which team developed neethiai',
+        'owner of neethi', 'owner of neethi ai', 'owner of neethiai',
+        'google developer team'
+    ]
+    if any(k in text for k in keywords):
+        return True
+    # Regex fallback for robustness
+    try:
+        import re
+        entity = r"(you|neethi\s*ai|neethi)"
+        verbs = r"(own|owns|owner|create|created|creator|develop|developed|build|built|made|make|founder)"
+        pattern = rf"\b(who|which|what)\b[^\n]{0,40}?\b{verbs}\b[^\n]{0,40}?\b{entity}\b"
+        return re.search(pattern, text) is not None
+    except Exception:
+        return False
+
+def get_creator_response() -> str:
+    return (
+        "NeethiAI was created and is maintained by Dharaanishan S and Hariharan G. "
+        "They are the developers/owners behind NeethiAI."
+    )
+
 # Tax Advisory
 def get_tax_advice(user_query, model):
     try:
@@ -547,8 +611,10 @@ def extract_text_easyocr(image):
     except Exception as e:
         raise Exception(f"Error extracting text from image: {str(e)}")
 
-def detect_fake_notice(text):
-    """Enhanced fake notice detection with multiple fraud patterns"""
+def detect_text_fraud_features(text: str):
+    """Analyze extracted text for fraud indicators and return (score, reasons)."""
+    if not text:
+        return 0, ["No text extracted"]
     
     # Suspicious keywords and phrases
     suspicious_keywords = [
@@ -609,16 +675,119 @@ def detect_fake_notice(text):
         fraud_score += 20
         fraud_reasons.append("Contains shortened links (suspicious)")
     
-    # Generate result
-    if fraud_score >= 30:
+    # Normalize to 0-60 range reserved for text
+    return min(int(fraud_score), 60), fraud_reasons
+
+
+def analyze_layout(image_rgb: np.ndarray):
+    """Heuristic layout analysis without templates. Returns (score_0_20, notes)."""
+    notes = []
+    try:
+        gray = cv2.cvtColor(image_rgb, cv2.COLOR_BGR2GRAY)
+    except Exception:
+        gray = image_rgb if len(image_rgb.shape) == 2 else cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
+    # Binarize and count text-like contours
+    thr = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                cv2.THRESH_BINARY_INV, 31, 15)
+    contours, _ = cv2.findContours(thr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    h, w = gray.shape[:2]
+    text_boxes = [cv2.boundingRect(c) for c in contours if cv2.contourArea(c) > 50]
+    density = sum((bw*bh) for (x, y, bw, bh) in text_boxes) / float(h*w + 1)
+    margins_ok = True if any(y < h*0.1 for (_, y, _, _) in text_boxes) is False else False
+    # Heuristics
+    score = 0
+    if density < 0.05 or density > 0.7:
+        score += 8; notes.append(f"Abnormal text density: {density:.2f}")
+    if not margins_ok:
+        score += 6; notes.append("Missing top margin (common in poor edits)")
+    if len(text_boxes) < 5:
+        score += 4; notes.append("Too few text regions detected")
+    return min(score, 20), notes
+
+
+def analyze_visual_anomalies(image_rgb: np.ndarray):
+    """Simple ELA-based anomaly check. Returns (score_0_20, notes)."""
+    try:
+        pil = Image.fromarray(cv2.cvtColor(image_rgb, cv2.COLOR_BGR2RGB))
+    except Exception:
+        pil = Image.fromarray(image_rgb)
+    bio = io.BytesIO()
+    try:
+        pil.save(bio, 'JPEG', quality=90)
+        bio.seek(0)
+        recompressed = Image.open(bio)
+        ela = Image.chops.difference(pil.convert('RGB'), recompressed.convert('RGB'))
+        stat = np.array(ela).astype(np.float32)
+        mean_diff = float(stat.mean())
+        # Map mean_diff to 0-20
+        score = max(0, min(20, int((mean_diff / 25.0) * 20)))
+        notes = [f"ELA mean difference: {mean_diff:.2f}"]
+        return score, notes
+    except Exception:
+        return 0, ["ELA check not applicable"]
+
+
+def verify_signature_placeholder(image_rgb: np.ndarray):
+    """Placeholder for signature/face verification. Returns (score_0_10, notes)."""
+    return 0, ["Signature/face verification skipped (no reference data)"]
+
+
+def detect_fake_notice(text: str, image_rgb: np.ndarray | None = None):
+    """Risk-scored pipeline combining text, layout, and visual anomaly analysis.
+
+    Returns (analysis_markdown, risk_level, fraud_score, recommendation).
+    """
+    # Text features (0-60)
+    text_score, text_notes = detect_text_fraud_features(text)
+
+    # Visual/layout (0-40 combined)
+    layout_score = 0
+    layout_notes = []
+    visual_score = 0
+    visual_notes = []
+    sign_score = 0
+    sign_notes = []
+    if image_rgb is not None:
+        try:
+            ls, ln = analyze_layout(image_rgb)
+            layout_score, layout_notes = ls, ln
+        except Exception:
+            layout_notes = ["Layout analysis failed"]
+        try:
+            vs, vn = analyze_visual_anomalies(image_rgb)
+            visual_score, visual_notes = vs, vn
+        except Exception:
+            visual_notes = ["Visual anomaly analysis failed"]
+        try:
+            ss, sn = verify_signature_placeholder(image_rgb)
+            sign_score, sign_notes = ss, sn
+        except Exception:
+            sign_notes = ["Signature check failed"]
+
+    # Combine scores (cap 100)
+    raw_score = text_score + visual_score + layout_score + sign_score
+    fraud_score = min(int(raw_score), 100)
+
+    # Risk mapping
+    if fraud_score >= 70:
         risk_level = "HIGH RISK"
-        recommendation = "🚨 **This appears to be a FAKE NOTICE**. Do not make any payments. Report to cybercrime.gov.in"
-    elif fraud_score >= 15:
+        recommendation = "🚨 **Likely FAKE**. Do not pay. Report to cybercrime.gov.in and verify with issuing department."
+    elif fraud_score >= 40:
         risk_level = "MEDIUM RISK"
-        recommendation = "⚠️ **Exercise caution**. Verify with official sources before taking any action."
+        recommendation = "⚠️ **Caution**. Cross-check with official helplines and websites before action."
     else:
         risk_level = "LOW RISK"
-        recommendation = "✅ **Notice appears legitimate**, but always verify with official sources."
+        recommendation = "✅ Appears legitimate, but verify via official channels before acting."
+
+    analysis_lines = []
+    if text_notes:
+        analysis_lines.append("Text indicators: " + "; ".join(text_notes))
+    if layout_notes:
+        analysis_lines.append("Layout check: " + "; ".join(layout_notes))
+    if visual_notes:
+        analysis_lines.append("Visual anomalies: " + "; ".join(visual_notes))
+    if sign_notes:
+        analysis_lines.append("Signature/face: " + "; ".join(sign_notes))
     
     result = f"""
 ## Fraud Detection Analysis
@@ -626,19 +795,19 @@ def detect_fake_notice(text):
 **Risk Level:** {risk_level} (Score: {fraud_score}/100)
 
 **Analysis:**
-{chr(10).join(fraud_reasons) if fraud_reasons else "No suspicious patterns detected"}
+{chr(10).join(analysis_lines) if analysis_lines else "No suspicious patterns detected"}
 
 **Recommendation:**
 {recommendation}
 
 **What to do next:**
 1. Cross-verify with official government websites
-2. Contact the mentioned department directly
+2. Contact the mentioned department directly via published numbers
 3. If suspicious, report to cybercrime.gov.in
 4. Never make payments without verification
 """
     
-    return result
+    return result, risk_level, fraud_score, recommendation
 
 # Voice Chat Support
 def create_voice_chat_interface():
@@ -1018,18 +1187,17 @@ def login():
         email = request.form['email']
         password = request.form['password']
         remember = True if request.form.get('remember') else False
-        
         user = User.query.filter_by(email=email).first()
-        
-        if user and check_password_hash(user.password_hash, password):
+        if user and user.password_hash and check_password_hash(user.password_hash, password):
             login_user(user, remember=remember)
             user.last_login = datetime.utcnow()
             db.session.commit()
             return redirect(url_for('dashboard'))
         else:
             flash('Invalid email or password')
-    
-    return render_template('login.html')
+    # Unified auth page; mode via query string (?mode=register)
+    mode = request.args.get('mode', 'login')
+    return render_template('auth.html', mode=mode)
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -1037,27 +1205,22 @@ def register():
         name = request.form['name']
         email = request.form['email']
         password = request.form['password']
-        
+        password_confirm = request.form.get('password_confirm', '')
+        if password_confirm and password != password_confirm:
+            flash('Passwords do not match')
+            return redirect(url_for('login', mode='register'))
         # Check if user already exists
         if User.query.filter_by(email=email).first():
             flash('Email already registered')
-            return render_template('register.html')
-        
+            return redirect(url_for('login', mode='register'))
         # Create new user
-        user = User(
-            name=name,
-            email=email,
-            password_hash=generate_password_hash(password),
-            auth_provider='email'
-        )
-        
+        user = User(name=name, email=email, password_hash=generate_password_hash(password), auth_provider='email')
         db.session.add(user)
         db.session.commit()
-        
         flash('Registration successful! Please log in.')
         return redirect(url_for('login'))
-    
-    return render_template('register.html')
+    # GET → unified page in register mode
+    return redirect(url_for('login', mode='register'))
 
 # Google OAuth Routes
 @app.route('/login/google')
@@ -1077,6 +1240,79 @@ def google_login():
         flash(f'Google OAuth error: {str(e)}')
         return redirect(url_for('login'))
 
+# GitHub OAuth routes
+@app.route('/login/github')
+def github_login():
+    if not os.getenv('GITHUB_CLIENT_ID') or not os.getenv('GITHUB_CLIENT_SECRET'):
+        flash('GitHub OAuth is not configured. Please contact the administrator.')
+        return redirect(url_for('login'))
+    redirect_uri = url_for('github_callback', _external=True)
+    return github.authorize_redirect(redirect_uri)
+
+@app.route('/callback/github')
+def github_callback():
+    try:
+        token = github.authorize_access_token()
+        user = github.get('user').json()
+        emails = github.get('user/emails').json() or []
+        primary_email = next((e['email'] for e in emails if e.get('primary')), user.get('email'))
+        if not primary_email:
+            flash('Failed to retrieve email from GitHub account')
+            return redirect(url_for('login'))
+        name = user.get('name') or user.get('login') or 'GitHub User'
+        user_row = User.query.filter_by(email=primary_email).first()
+        if not user_row:
+            user_row = User(email=primary_email, name=name, auth_provider='github')
+            db.session.add(user_row)
+            db.session.commit()
+        login_user(user_row)
+        user_row.last_login = datetime.utcnow()
+        db.session.commit()
+        return redirect(url_for('dashboard'))
+    except Exception as e:
+        flash(f'GitHub login failed: {str(e)}')
+        return redirect(url_for('login'))
+
+# LinkedIn OAuth routes
+@app.route('/login/linkedin')
+def linkedin_login():
+    if not os.getenv('LINKEDIN_CLIENT_ID') or not os.getenv('LINKEDIN_CLIENT_SECRET'):
+        flash('LinkedIn OAuth is not configured. Please contact the administrator.')
+        return redirect(url_for('login'))
+    redirect_uri = url_for('linkedin_callback', _external=True)
+    return linkedin.authorize_redirect(redirect_uri)
+
+@app.route('/callback/linkedin')
+def linkedin_callback():
+    try:
+        token = linkedin.authorize_access_token()
+        # Fetch profile and email
+        profile = linkedin.get('me?projection=(id,localizedFirstName,localizedLastName)').json()
+        email_resp = linkedin.get('emailAddress?q=members&projection=(elements*(handle~))').json()
+        email_elements = (email_resp or {}).get('elements', [])
+        primary_email = None
+        for el in email_elements:
+            handle = el.get('handle~') or {}
+            if handle.get('emailAddress'):
+                primary_email = handle.get('emailAddress')
+                break
+        if not primary_email:
+            flash('Failed to retrieve email from LinkedIn account')
+            return redirect(url_for('login'))
+        name = f"{profile.get('localizedFirstName','')} {profile.get('localizedLastName','')}".strip() or 'LinkedIn User'
+        user_row = User.query.filter_by(email=primary_email).first()
+        if not user_row:
+            user_row = User(email=primary_email, name=name, auth_provider='linkedin')
+            db.session.add(user_row)
+            db.session.commit()
+        login_user(user_row)
+        user_row.last_login = datetime.utcnow()
+        db.session.commit()
+        return redirect(url_for('dashboard'))
+    except Exception as e:
+        flash(f'LinkedIn login failed: {str(e)}')
+        return redirect(url_for('login'))
+
 @app.route('/callback/google')
 def google_callback():
     try:
@@ -1091,11 +1327,11 @@ def google_callback():
         name = user_info.get('name')
         google_id = user_info.get('sub')
         profile_picture = user_info.get('picture')
-        
+            
         if not email or not name:
             flash('Incomplete user information from Google')
             return redirect(url_for('login'))
-        
+            
         # Check if user exists
         user = User.query.filter_by(email=email).first()
         
@@ -1116,14 +1352,14 @@ def google_callback():
             user.profile_picture = profile_picture
             user.auth_provider = 'google'
             db.session.commit()
-        
+            
         # Login user
         login_user(user)
         user.last_login = datetime.utcnow()
         db.session.commit()
-        
+            
         return redirect(url_for('dashboard'))
-
+    
     except Exception as e:
         print(f"Google OAuth error: {str(e)}")  # Log for debugging
         flash('Google login failed. Please try again or contact support.')
@@ -1156,6 +1392,33 @@ def api_chat():
     
     if not question:
         return jsonify({'error': 'Question cannot be empty'}), 400
+    
+    # Short-circuit for creator/owner questions
+    try:
+        if is_creator_query(question):
+            answer = get_creator_response()
+            sources = []
+            feature_used = 'about_creator'
+            # Save to database
+            chat = Chat(
+                user_id=current_user.id,
+                question=question,
+                answer=answer,
+                sources=json.dumps(sources),
+                language='en',
+                feature_used=feature_used
+            )
+            db.session.add(chat)
+            db.session.commit()
+            return jsonify({
+                'answer': answer,
+                'sources': sources,
+                'chat_id': chat.id,
+                'timestamp': datetime.utcnow().isoformat()
+            })
+    except Exception:
+        # If anything goes wrong, fall back to normal flow
+        pass
     
     try:
         # Get Gemini model
@@ -1223,7 +1486,6 @@ Answer clearly and helpfully. If citing laws/sections, be precise. Keep it user-
             'chat_id': chat.id,
             'timestamp': datetime.utcnow().isoformat()
         })
-    
     except Exception as e:
         app.logger.error(f"Chat API error: {str(e)}")
         app.logger.error(f"Error type: {type(e).__name__}")
@@ -1309,6 +1571,19 @@ def change_password():
     db.session.commit()
     return jsonify({'ok': True})
 
+# Forgot password inline flow, reuse unified auth page
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form.get('email','').strip()
+        if not email:
+            flash('Please enter your email')
+            return render_template('auth.html', mode='forgot')
+        # In production: issue token + send email
+        flash('If this email exists, a reset link has been sent.')
+        return redirect(url_for('login'))
+    return render_template('auth.html', mode='forgot')
+
 @app.route('/api/profile/export', methods=['GET'])
 @login_required
 def export_chats():
@@ -1333,6 +1608,93 @@ def health_check():
         'status': 'healthy',
         'timestamp': datetime.utcnow().isoformat(),
         'database': 'connected' if os.getenv('DATABASE_URL') else 'not_connected'
+    })
+
+# --- Time utilities & endpoints ---
+def get_current_times():
+    """Return current timestamps in UTC and IST (Asia/Kolkata)."""
+    now_utc = datetime.now(timezone.utc)
+    if _has_zoneinfo:
+        ist = now_utc.astimezone(ZoneInfo('Asia/Kolkata'))
+    else:
+        # Fallback fixed offset for IST (+05:30)
+        ist = now_utc.astimezone(timezone(timedelta(hours=5, minutes=30)))
+    return {
+        'utc_iso': now_utc.isoformat(),
+        'ist_iso': ist.isoformat(),
+        'epoch_ms': int(now_utc.timestamp() * 1000)
+    }
+
+@app.route('/api/time')
+def api_time():
+    """Return server time in UTC and IST to enable real-time answers on the client."""
+    return jsonify(get_current_times())
+
+# --- Official news (RSS) endpoint ---
+def fetch_rss_items(url, max_items=5):
+    """Best-effort RSS fetcher using requests + BeautifulSoup (no external feedparser).
+    Returns list of {title, link, published}.
+    """
+    try:
+        headers = {
+            'User-Agent': 'NeethiAI/1.0 (+https://neethi.ai)'
+        }
+        resp = requests.get(url, timeout=10, headers=headers)
+        if resp.status_code != 200:
+            return []
+        soup = BeautifulSoup(resp.content, 'xml')
+        items = []
+        for item in soup.find_all('item')[:max_items]:
+            title = (item.title.get_text(strip=True) if item.title else '').strip()
+            link = (item.link.get_text(strip=True) if item.link else '').strip()
+            pub = ''
+            if item.pubDate:
+                pub = item.pubDate.get_text(strip=True)
+            elif item.find('updated'):
+                pub = item.find('updated').get_text(strip=True)
+            items.append({'title': title, 'link': link, 'published': pub})
+        # Atom fallback (<entry>)
+        if not items:
+            for entry in soup.find_all('entry')[:max_items]:
+                title = (entry.title.get_text(strip=True) if entry.title else '').strip()
+                link_tag = entry.find('link')
+                href = link_tag.get('href') if link_tag and link_tag.has_attr('href') else ''
+                updated = (entry.updated.get_text(strip=True) if entry.find('updated') else '')
+                items.append({'title': title, 'link': href, 'published': updated})
+        return items
+    except Exception:
+        return []
+
+@app.route('/api/news')
+def api_news():
+    """Aggregate headlines from official Indian government and regulator RSS feeds.
+    Sources are limited to .gov.in/.nic.in and apex bodies.
+    """
+    feeds = [
+        # Press Information Bureau (PIB)
+        'https://pib.gov.in/rssall.aspx',
+        # RBI Press Releases
+        'https://www.rbi.org.in/Rss/PressReleaseRss.aspx',
+        # CBIC (indirect taxes) news
+        'https://www.cbic.gov.in/htdocs-cbec/rss.xml',
+        # India Portal (news)
+        'https://www.india.gov.in/news_feeds?output=rss',
+    ]
+    aggregated = []
+    for f in feeds:
+        aggregated.extend(fetch_rss_items(f, max_items=5))
+    # De-duplicate by link
+    seen = set()
+    unique = []
+    for it in aggregated:
+        key = it.get('link') or it.get('title')
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(it)
+    return jsonify({
+        'generated_at': get_current_times(),
+        'count': len(unique),
+        'items': unique
     })
 
 # Additional API Routes
@@ -1387,7 +1749,7 @@ def upload_document():
         db.session.add(summary_chat)
         db.session.commit()
         chat_id = summary_chat.id
-
+        
         return jsonify({
             'text': text,
             'summary': summary,
@@ -1459,10 +1821,13 @@ def detect_fake_notice_api():
         
         if not text or len(text.strip()) < 5:
             app.logger.warning('Very little text extracted from image')
-            result = "⚠️ **Unable to extract sufficient text from the image.**\n\n**Possible reasons:**\n- Image quality is too low\n- Text is too small or blurry\n- Image format not supported\n- No text present in image\n\n**Please try:**\n- Using a higher quality image\n- Ensuring text is clearly visible\n- Using JPG, PNG, or PDF format"
+            result_text = "⚠️ **Unable to extract sufficient text from the image.**\n\n**Possible reasons:**\n- Image quality is too low\n- Text is too small or blurry\n- Image format not supported\n- No text present in image\n\n**Please try:**\n- Using a higher quality image\n- Ensuring text is clearly visible\n- Using JPG, PNG, or PDF format"
+            risk_level = "UNKNOWN"
+            fraud_score = 0
+            recommendation = "Upload a clearer image for analysis"
             sources = []
         else:
-            result = detect_fake_notice(text)
+            result_text, risk_level, fraud_score, recommendation = detect_fake_notice(text)
             try:
                 sources = get_legal_sources("fake legal notice")
             except Exception as e:
@@ -1474,7 +1839,7 @@ def detect_fake_notice_api():
             saved = Chat(
                 user_id=current_user.id,
                 question='[Fake Notice] Image checked',
-                answer=result,
+                answer=result_text,
                 sources=json.dumps(sources),
                 language='en',
                 feature_used='fake_notice'
@@ -1486,10 +1851,13 @@ def detect_fake_notice_api():
         except Exception as e:
             app.logger.error(f'Failed to save fake notice analysis: {e}')
             chat_id = None
-
+        
         return jsonify({
             'text': text,
-            'result': result,
+            'result': result_text,
+            'risk_level': risk_level,
+            'fraud_score': fraud_score,
+            'recommendation': recommendation,
             'sources': sources,
             'chat_id': chat_id
         })
@@ -1509,7 +1877,6 @@ def tax_advice():
     try:
         advice = get_tax_advice(query, model)
         sources = get_legal_sources("tax advisory")
-        
         return jsonify({
             'advice': advice,
             'sources': sources
