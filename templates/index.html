@@ -1,235 +1,317 @@
-{% extends "base.html" %}
-
-{% block title %}NeethiAI - Your Legal AI Companion{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}NeethiAI - Your Legal AI Companion{%
+endblock %} {% block content %}
 <!-- Hero Section -->
 <section class="hero-section py-5">
-    <div class="container">
-        <div class="row align-items-center">
-            <div class="col-lg-6">
-                <div class="hero-content">
-                    <div class="d-flex align-items-center mb-4">
-                        <img src="{{ url_for('static', filename='icons/Logo.png') }}" alt="NeethiAI Logo" width="80" height="80" class="me-3">
-                        <div>
-                            <h1 class="display-4 fw-bold text-gradient mb-0">
-                                NeethiAI
-                                <span class="tamil-text d-block" style="font-size: 0.7em; color: #666;">
-                                    உங்கள் சட்ட AI உதவியாளர்
-                                </span>
-                            </h1>
-                        </div>
-                    </div>
-                    <p class="lead mb-4">
-                        Your comprehensive legal AI companion for Indian citizens. Get instant legal guidance, 
-                        document analysis, and fraud protection with trusted government sources.
-                        <br><small class="text-muted">Visit: <strong>neethiai.com</strong></small>
-                    </p>
-                    <div class="hero-buttons">
-                        <a href="{{ url_for('login', mode='register') }}" class="btn btn-primary btn-lg me-3">
-                            <i class="fas fa-rocket me-2"></i>Get Started
-                        </a>
-                        <a href="{{ url_for('login') }}" class="btn btn-outline-primary btn-lg">
-                            <i class="fas fa-sign-in-alt me-2"></i>Login
-                        </a>
-                    </div>
-                </div>
+  <div class="container">
+    <div class="row align-items-center">
+      <div class="col-lg-6">
+        <div class="hero-content">
+          <div class="d-flex align-items-center mb-4">
+            <img
+              src="{{ url_for('static', filename='icons/logo.jpg') }}"
+              alt="NeethiAI Logo"
+              width="80"
+              height="80"
+              class="me-3"
+            />
+            <div>
+              <h1 class="display-4 fw-bold text-gradient mb-0">
+                NeethiAI
+                <span
+                  class="tamil-text d-block"
+                  style="font-size: 0.7em; color: #666"
+                >
+                  உங்கள் சட்ட AI உதவியாளர்
+                </span>
+              </h1>
             </div>
-            <div class="col-lg-6">
-                <div class="hero-image text-center">
-                    <i class="fas fa-balance-scale text-primary" style="font-size: 15rem; opacity: 0.1;"></i>
-                </div>
-            </div>
+          </div>
+          <p class="lead mb-4">
+            Your comprehensive legal AI companion for Indian citizens. Get
+            instant legal guidance, document analysis, and fraud protection with
+            trusted government sources.
+            <br /><small class="text-muted"
+              >Visit: <strong>neethiai.com</strong></small
+            >
+          </p>
+          <div class="hero-buttons">
+            <a
+              href="{{ url_for('login', mode='register') }}"
+              class="btn btn-primary btn-lg me-3"
+            >
+              <i class="fas fa-rocket me-2"></i>Get Started
+            </a>
+            <a
+              href="{{ url_for('login') }}"
+              class="btn btn-outline-primary btn-lg"
+            >
+              <i class="fas fa-sign-in-alt me-2"></i>Login
+            </a>
+          </div>
         </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="hero-image text-center">
+          <i
+            class="fas fa-balance-scale text-primary"
+            style="font-size: 15rem; opacity: 0.1"
+          ></i>
+        </div>
+      </div>
     </div>
+  </div>
 </section>
 
 <!-- Features Section -->
 <section class="features-section py-5 bg-light">
-    <div class="container">
-        <div class="row">
-            <div class="col-lg-8 mx-auto text-center mb-5">
-                <h2 class="display-5 fw-bold text-gradient mb-3">Powerful Legal AI Features</h2>
-                <p class="lead">Everything you need for legal guidance in one platform</p>
-            </div>
-        </div>
-        
-        <div class="row g-4">
-            <div class="col-md-6 col-lg-4">
-                <div class="card h-100 border-0 shadow-custom">
-                    <div class="card-body text-center p-4">
-                        <div class="feature-icon mb-3">
-                            <i class="fas fa-file-alt text-primary" style="font-size: 3rem;"></i>
-                        </div>
-                        <h5 class="card-title">Document Analysis</h5>
-                        <p class="card-text">Upload legal documents (PDF, Word, Images) and get AI-powered summaries with actionable insights.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-6 col-lg-4">
-                <div class="card h-100 border-0 shadow-custom">
-                    <div class="card-body text-center p-4">
-                        <div class="feature-icon mb-3">
-                            <i class="fas fa-comments text-primary" style="font-size: 3rem;"></i>
-                        </div>
-                        <h5 class="card-title">Real-time Legal Q&A</h5>
-                        <p class="card-text">Ask legal questions in English or Tamil and get instant answers with verified legal sources.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-6 col-lg-4">
-                <div class="card h-100 border-0 shadow-custom">
-                    <div class="card-body text-center p-4">
-                        <div class="feature-icon mb-3">
-                            <i class="fas fa-shield-alt text-primary" style="font-size: 3rem;"></i>
-                        </div>
-                        <h5 class="card-title">Fake Notice Detection</h5>
-                        <p class="card-text">Advanced fraud detection to protect you from fake legal notices and scams.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-6 col-lg-4">
-                <div class="card h-100 border-0 shadow-custom">
-                    <div class="card-body text-center p-4">
-                        <div class="feature-icon mb-3">
-                            <i class="fas fa-calculator text-primary" style="font-size: 3rem;"></i>
-                        </div>
-                        <h5 class="card-title">Tax Advisory</h5>
-                        <p class="card-text">Get expert tax advice, calculations, and filing guidance for Income Tax and GST.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-6 col-lg-4">
-                <div class="card h-100 border-0 shadow-custom">
-                    <div class="card-body text-center p-4">
-                        <div class="feature-icon mb-3">
-                            <i class="fas fa-microphone text-primary" style="font-size: 3rem;"></i>
-                        </div>
-                        <h5 class="card-title">Voice Chat</h5>
-                        <p class="card-text">Speak your legal questions and get voice responses in English or Tamil.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-6 col-lg-4">
-                <div class="card h-100 border-0 shadow-custom">
-                    <div class="card-body text-center p-4">
-                        <div class="feature-icon mb-3">
-                            <i class="fas fa-book text-primary" style="font-size: 3rem;"></i>
-                        </div>
-                        <h5 class="card-title">Legal Handbook</h5>
-                        <p class="card-text">Quick access to common legal procedures like FIR, RTI, and emergency contacts.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <div class="container">
+    <div class="row">
+      <div class="col-lg-8 mx-auto text-center mb-5">
+        <h2 class="display-5 fw-bold text-gradient mb-3">
+          Powerful Legal AI Features
+        </h2>
+        <p class="lead">
+          Everything you need for legal guidance in one platform
+        </p>
+      </div>
     </div>
+
+    <div class="row g-4">
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 border-0 shadow-custom">
+          <div class="card-body text-center p-4">
+            <div class="feature-icon mb-3">
+              <i
+                class="fas fa-file-alt text-primary"
+                style="font-size: 3rem"
+              ></i>
+            </div>
+            <h5 class="card-title">Document Analysis</h5>
+            <p class="card-text">
+              Upload legal documents (PDF, Word, Images) and get AI-powered
+              summaries with actionable insights.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 border-0 shadow-custom">
+          <div class="card-body text-center p-4">
+            <div class="feature-icon mb-3">
+              <i
+                class="fas fa-comments text-primary"
+                style="font-size: 3rem"
+              ></i>
+            </div>
+            <h5 class="card-title">Real-time Legal Q&A</h5>
+            <p class="card-text">
+              Ask legal questions in English or Tamil and get instant answers
+              with verified legal sources.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 border-0 shadow-custom">
+          <div class="card-body text-center p-4">
+            <div class="feature-icon mb-3">
+              <i
+                class="fas fa-shield-alt text-primary"
+                style="font-size: 3rem"
+              ></i>
+            </div>
+            <h5 class="card-title">Fake Notice Detection</h5>
+            <p class="card-text">
+              Advanced fraud detection to protect you from fake legal notices
+              and scams.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 border-0 shadow-custom">
+          <div class="card-body text-center p-4">
+            <div class="feature-icon mb-3">
+              <i
+                class="fas fa-calculator text-primary"
+                style="font-size: 3rem"
+              ></i>
+            </div>
+            <h5 class="card-title">Tax Advisory</h5>
+            <p class="card-text">
+              Get expert tax advice, calculations, and filing guidance for
+              Income Tax and GST.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 border-0 shadow-custom">
+          <div class="card-body text-center p-4">
+            <div class="feature-icon mb-3">
+              <i
+                class="fas fa-microphone text-primary"
+                style="font-size: 3rem"
+              ></i>
+            </div>
+            <h5 class="card-title">Voice Chat</h5>
+            <p class="card-text">
+              Speak your legal questions and get voice responses in English or
+              Tamil.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 border-0 shadow-custom">
+          <div class="card-body text-center p-4">
+            <div class="feature-icon mb-3">
+              <i class="fas fa-book text-primary" style="font-size: 3rem"></i>
+            </div>
+            <h5 class="card-title">Legal Handbook</h5>
+            <p class="card-text">
+              Quick access to common legal procedures like FIR, RTI, and
+              emergency contacts.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- Trusted Sources Section -->
 <section class="trusted-sources py-5">
-    <div class="container">
-        <div class="row">
-            <div class="col-lg-8 mx-auto text-center mb-5">
-                <h2 class="display-5 fw-bold text-gradient mb-3">Trusted Legal Sources</h2>
-                <p class="lead">All responses are grounded in official Indian and Tamil Nadu government sources</p>
-            </div>
-        </div>
-        
-        <div class="row g-3">
-            <div class="col-md-6">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body">
-                        <h6 class="card-title text-primary">National Sources</h6>
-                        <ul class="list-unstyled mb-0">
-                            <li><i class="fas fa-check text-success me-2"></i>indiankanoon.org</li>
-                            <li><i class="fas fa-check text-success me-2"></i>gov.in & legislative.gov.in</li>
-                            <li><i class="fas fa-check text-success me-2"></i>prsindia.org</li>
-                            <li><i class="fas fa-check text-success me-2"></i>incometax.gov.in</li>
-                            <li><i class="fas fa-check text-success me-2"></i>gst.gov.in</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="col-md-6">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body">
-                        <h6 class="card-title text-primary">Tamil Nadu Sources</h6>
-                        <ul class="list-unstyled mb-0">
-                            <li><i class="fas fa-check text-success me-2"></i>tn.gov.in</li>
-                            <li><i class="fas fa-check text-success me-2"></i>law.tn.gov.in</li>
-                            <li><i class="fas fa-check text-success me-2"></i>ctd.tn.gov.in</li>
-                            <li><i class="fas fa-check text-success me-2"></i>tnpolice.gov.in</li>
-                            <li><i class="fas fa-check text-success me-2"></i>tnincometax.gov.in</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <div class="container">
+    <div class="row">
+      <div class="col-lg-8 mx-auto text-center mb-5">
+        <h2 class="display-5 fw-bold text-gradient mb-3">
+          Trusted Legal Sources
+        </h2>
+        <p class="lead">
+          All responses are grounded in official Indian and Tamil Nadu
+          government sources
+        </p>
+      </div>
     </div>
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body">
+            <h6 class="card-title text-primary">National Sources</h6>
+            <ul class="list-unstyled mb-0">
+              <li>
+                <i class="fas fa-check text-success me-2"></i>indiankanoon.org
+              </li>
+              <li>
+                <i class="fas fa-check text-success me-2"></i>gov.in &
+                legislative.gov.in
+              </li>
+              <li>
+                <i class="fas fa-check text-success me-2"></i>prsindia.org
+              </li>
+              <li>
+                <i class="fas fa-check text-success me-2"></i>incometax.gov.in
+              </li>
+              <li><i class="fas fa-check text-success me-2"></i>gst.gov.in</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body">
+            <h6 class="card-title text-primary">Tamil Nadu Sources</h6>
+            <ul class="list-unstyled mb-0">
+              <li><i class="fas fa-check text-success me-2"></i>tn.gov.in</li>
+              <li>
+                <i class="fas fa-check text-success me-2"></i>law.tn.gov.in
+              </li>
+              <li>
+                <i class="fas fa-check text-success me-2"></i>ctd.tn.gov.in
+              </li>
+              <li>
+                <i class="fas fa-check text-success me-2"></i>tnpolice.gov.in
+              </li>
+              <li>
+                <i class="fas fa-check text-success me-2"></i>tnincometax.gov.in
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- CTA Section -->
 <section class="cta-section py-5 bg-primary text-white">
-    <div class="container">
-        <div class="row">
-            <div class="col-lg-8 mx-auto text-center">
-                <h2 class="display-5 fw-bold mb-3">Ready to Get Started?</h2>
-                <p class="lead mb-4">Join thousands of Indian citizens who trust NeethiAI for their legal needs.</p>
-                <a href="{{ url_for('register') }}" class="btn btn-light btn-lg">
-                    <i class="fas fa-rocket me-2"></i>Start Your Legal Journey
-                </a>
-            </div>
-        </div>
+  <div class="container">
+    <div class="row">
+      <div class="col-lg-8 mx-auto text-center">
+        <h2 class="display-5 fw-bold mb-3">Ready to Get Started?</h2>
+        <p class="lead mb-4">
+          Join thousands of Indian citizens who trust NeethiAI for their legal
+          needs.
+        </p>
+        <a href="{{ url_for('register') }}" class="btn btn-light btn-lg">
+          <i class="fas fa-rocket me-2"></i>Start Your Legal Journey
+        </a>
+      </div>
     </div>
+  </div>
 </section>
-{% endblock %}
-
-{% block extra_css %}
+{% endblock %} {% block extra_css %}
 <style>
-.hero-section {
+  .hero-section {
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
     min-height: 70vh;
     display: flex;
     align-items: center;
-}
+  }
 
-.hero-content h1 {
+  .hero-content h1 {
     line-height: 1.2;
-}
+  }
 
-.hero-buttons .btn {
+  .hero-buttons .btn {
     margin-bottom: 10px;
-}
+  }
 
-.features-section .card {
+  .features-section .card {
     transition: all 0.3s ease;
-}
+  }
 
-.features-section .card:hover {
+  .features-section .card:hover {
     transform: translateY(-10px);
-}
+  }
 
-.feature-icon {
+  .feature-icon {
     transition: all 0.3s ease;
-}
+  }
 
-.features-section .card:hover .feature-icon {
+  .features-section .card:hover .feature-icon {
     transform: scale(1.1);
-}
+  }
 
-.trusted-sources .card {
+  .trusted-sources .card {
     background: #f8f9fa;
     border: 1px solid #e9ecef;
-}
+  }
 
-.cta-section {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-}
+  .cta-section {
+    background: linear-gradient(
+      135deg,
+      var(--primary-color) 0%,
+      var(--secondary-color) 100%
+    );
+  }
 </style>
 {% endblock %}

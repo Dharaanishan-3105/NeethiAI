@@ -1,44 +1,53 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.exceptions import RequestEntityTooLarge
+from datetime import datetime, timedelta, timezone
+
 from authlib.integrations.flask_client import OAuth
-from datetime import datetime, timezone, timedelta
+from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.security import check_password_hash, generate_password_hash
+
 try:
     from zoneinfo import ZoneInfo  # Python 3.9+
+
     _has_zoneinfo = True
 except Exception:
     _has_zoneinfo = False
-import os
 import json
-import requests
-from bs4 import BeautifulSoup
-from duckduckgo_search import DDGS
-from urllib.parse import urlparse
-import google.generativeai as genai
+import os
 import re
-import random
-from time import sleep
-import langdetect
-from langdetect import detect
-import PyPDF2
+from typing import Any, cast
+from urllib.parse import urlparse
+
 import docx
 import easyocr
-from PIL import Image, ImageFile
+import google.generativeai as genai
+import PyPDF2
+import requests
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from duckduckgo_search import DDGS
+from langdetect import detect
+from PIL import Image, ImageFile
 
 # Load environment variables
 load_dotenv()
 # Pillow compatibility shim for deprecated resampling constants used by dependencies (e.g., EasyOCR)
 try:
     # Pillow >= 10 removed these aliases; map to Resampling equivalents
-    if not hasattr(Image, 'ANTIALIAS'):
-        Image.ANTIALIAS = Image.Resampling.LANCZOS
-    if not hasattr(Image, 'BILINEAR'):
-        Image.BILINEAR = Image.Resampling.BILINEAR
-    if not hasattr(Image, 'BICUBIC'):
-        Image.BICUBIC = Image.Resampling.BICUBIC
+    if not hasattr(Image, "ANTIALIAS"):
+        setattr(Image, "ANTIALIAS", Image.Resampling.LANCZOS)
+    if not hasattr(Image, "BILINEAR"):
+        setattr(Image, "BILINEAR", Image.Resampling.BILINEAR)
+    if not hasattr(Image, "BICUBIC"):
+        setattr(Image, "BICUBIC", Image.Resampling.BICUBIC)
 except Exception:
     pass
 try:
@@ -48,79 +57,113 @@ except Exception:
     pass
 try:
     import pytesseract
+
     _has_tesseract = True
 except Exception:
     _has_tesseract = False
+import io
+
 import cv2
 import numpy as np
-import io
-import base64
+
+# Encryption helpers removed
+
+# Optional PaddleOCR (GPU) fallback
+try:
+    from paddleocr import PaddleOCR  # type: ignore
+
+    _has_paddleocr = True
+except Exception:
+    _has_paddleocr = False
 
 # Initialize Flask app
 app = Flask(__name__)
 
 # Configuration
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
+app.config["SECRET_KEY"] = os.getenv(
+    "SECRET_KEY",
+    "qJBri77yHZvgMoRHmf_VkTzyBT8qRRANtRU0R2JqG5NPX9NSZA-seOBrMeuweL8TG284Wht7YLkSU0KPIdKloA",
+)
 
 # Database configuration - use Render's DATABASE_URL if available
-database_url = os.getenv('DATABASE_URL')
+database_url = os.getenv("DATABASE_URL")
 if database_url:
     # Render provides DATABASE_URL, use it directly
-    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-    print(f"🔗 Using production database: {database_url[:50]}...")
-    print("✅ Database URL found - ready for production!")
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+    print(f"Using production database: {database_url[:50]}...")
+    print("Database URL found - ready for production!")
 else:
     # Local development fallback
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://neethi_user:HariDharaan%402025@localhost/neethi_ai'
-    print("🔗 Using local development database")
-    print("⚠️  WARNING: DATABASE_URL not found! Make sure to set it in Render environment variables.")
-    print("💡 To fix: Link your PostgreSQL database to the web service in Render dashboard")
-    print("📋 Environment variables available:", [k for k in os.environ.keys() if 'DATABASE' in k.upper()])
+    app.config["SQLALCHEMY_DATABASE_URI"] = (
+        "postgresql://neethi_user:HariDharaan%402025@localhost/neethi_ai"
+    )
+    print("Using local development database")
+    print("WARNING: DATABASE_URL not found! Make sure to set it in Render environment variables.")
+    print("To fix: Link your PostgreSQL database to the web service in Render dashboard")
+    print(
+        "Environment variables available:",
+        [k for k in os.environ.keys() if "DATABASE" in k.upper()],
+    )
 
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 # Limit uploads to 10 MB to prevent crashes
-app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', 10 * 1024 * 1024))
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 10 * 1024 * 1024))
 
 # Initialize extensions
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login'
-login_manager.login_message = 'Please log in to access this page.'
+setattr(login_manager, "login_view", "login")
+setattr(login_manager, "login_message", "Please log in to access this page.")
 
 # Initialize OAuth
 oauth = OAuth(app)
-google = oauth.register(
-    name='google',
-    client_id=os.getenv('GOOGLE_CLIENT_ID', 'your-google-client-id'),
-    client_secret=os.getenv('GOOGLE_CLIENT_SECRET', 'your-google-client-secret'),
-    server_metadata_url='https://accounts.google.com/.well-known/openid_configuration',
-    client_kwargs={
-        'scope': 'openid email profile'
-    }
+# Cast to Any to satisfy static type checker for OAuth client methods
+google = cast(
+    Any,
+    oauth.register(
+        name="google",
+        client_id=os.getenv(
+            "GOOGLE_CLIENT_ID",
+            "432400946341-nab0qpvs97uk7rge79kkniu7l71f1qc9.apps.googleusercontent.com",
+        ),
+        client_secret=os.getenv("GOOGLE_CLIENT_SECRET", "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"),
+        server_metadata_url="https://accounts.google.com/.well-known/openid_configuration",
+        client_kwargs={"scope": "openid email profile"},
+    ),
 )
 
 # Optional: GitHub OAuth
-github = oauth.register(
-    name='github',
-    client_id=os.getenv('GITHUB_CLIENT_ID'),
-    client_secret=os.getenv('GITHUB_CLIENT_SECRET'),
-    access_token_url='https://github.com/login/oauth/access_token',
-    authorize_url='https://github.com/login/oauth/authorize',
-    api_base_url='https://api.github.com/',
-    client_kwargs={'scope': 'read:user user:email'}
+github = cast(
+    Any,
+    oauth.register(
+        name="github",
+        client_id=os.getenv("Ov23ct7JIcOsCqwD19bw"),
+        client_secret=os.getenv("6ed5a5948a8d221de9cd5065ed6048497dcd93c"),
+        access_token_url="https://github.com/login/oauth/access_token",
+        authorize_url="https://github.com/login/oauth/authorize",
+        api_base_url="https://api.github.com/",
+        client_kwargs={"scope": "read:user user:email"},
+    ),
 )
 
 # Optional: LinkedIn OAuth
-linkedin = oauth.register(
-    name='linkedin',
-    client_id=os.getenv('LINKEDIN_CLIENT_ID'),
-    client_secret=os.getenv('LINKEDIN_CLIENT_SECRET'),
-    access_token_url='https://www.linkedin.com/oauth/v2/accessToken',
-    authorize_url='https://www.linkedin.com/oauth/v2/authorization',
-    api_base_url='https://api.linkedin.com/v2/',
-    client_kwargs={'scope': 'r_liteprofile r_emailaddress', 'token_endpoint_auth_method': 'client_secret_post'}
+linkedin = cast(
+    Any,
+    oauth.register(
+        name="linkedin",
+        client_id=os.getenv("86cajthasv4l0w"),
+        client_secret=os.getenv("WPL_AP1.Zyho9Or5baFxpdnK.aQdahw=="),
+        access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
+        authorize_url="https://www.linkedin.com/oauth/v2/authorization",
+        api_base_url="https://api.linkedin.com/v2/",
+        client_kwargs={
+            "scope": "r_liteprofile r_emailaddress",
+            "token_endpoint_auth_method": "client_secret_post",
+        },
+    ),
 )
+
 
 # Database Models
 class User(UserMixin, db.Model):
@@ -133,60 +176,107 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
     is_active = db.Column(db.Boolean, default=True)
-    auth_provider = db.Column(db.String(20), default='email')  # 'email' or 'google'
-    
+    auth_provider = db.Column(db.String(20), default="email")  # 'email' or 'google'
+
     # Relationship to chats
-    chats = db.relationship('Chat', backref='user', lazy=True, cascade='all, delete-orphan')
+    chats = db.relationship("Chat", backref="user", lazy=True, cascade="all, delete-orphan")
+
 
 class Chat(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     question = db.Column(db.Text, nullable=False)
     answer = db.Column(db.Text, nullable=False)
     sources = db.Column(db.Text)  # JSON string of sources
-    language = db.Column(db.String(10), default='en')
+    language = db.Column(db.String(10), default="en")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     feature_used = db.Column(db.String(50))  # Which feature was used
+    conversation_id = db.Column(
+        db.Integer, db.ForeignKey("conversation.id"), nullable=True
+    )  # Link to conversation
+    is_edited = db.Column(db.Boolean, default=False)  # Track if message was edited
+    edited_at = db.Column(db.DateTime)  # When it was edited
+    # Encryption metadata
+    chat_encrypted = db.Column(db.Boolean, default=False)
+    chat_iv = db.Column(db.Text)
+    chat_tag = db.Column(db.Text)
+    enc_version = db.Column(db.SmallInteger, default=1)
+    key_id = db.Column(db.Text)
+
+
+class Conversation(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)  # For soft deletion
+
+    # Relationships
+    chats = db.relationship("Chat", backref="conversation", lazy=True, cascade="all, delete-orphan")
+
+
+class VerificationFeedback(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    chat_id = db.Column(db.Integer, db.ForeignKey("chat.id"), nullable=True)
+    verification_type = db.Column(
+        db.String(50), nullable=False
+    )  # 'fake_notice', 'document_analysis', etc.
+    original_result = db.Column(db.Text, nullable=False)  # Original analysis result
+    user_feedback = db.Column(db.String(20), nullable=False)  # 'correct', 'incorrect', 'partial'
+    feedback_details = db.Column(db.Text)  # User's detailed feedback
+    admin_response = db.Column(db.Text)  # Admin's response
+    status = db.Column(db.String(20), default="pending")  # 'pending', 'reviewed', 'resolved'
+    priority = db.Column(db.Integer, default=1)  # 1=low, 2=medium, 3=high
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    resolved_at = db.Column(db.DateTime)
+
 
 # User loader for Flask-Login
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+
 # Make config available in templates
 @app.context_processor
 def inject_config():
     return dict(config=app.config)
 
+
 # Initialize EasyOCR reader with Tamil support
 # EasyOCR reader will be initialized when needed to avoid startup issues
 reader = None
+
 
 # Language Detection and Support
 def detect_language(text):
     """Detect if text is in Tamil or English"""
     try:
         lang = detect(text)
-        return 'ta' if lang == 'ta' else 'en'
+        return "ta" if lang == "ta" else "en"
     except:
-        return 'en'
+        return "en"
+
 
 def get_language_prompt(language):
     """Get language-specific prompts"""
-    if language == 'ta':
+    if language == "ta":
         return {
-            'system': "நீங்கள் ஒரு சட்ட AI உதவியாளர். இந்திய குடிமக்களுக்கு அவர்களின் உரிமைகளை புரிந்துகொள்ள உதவுங்கள்.",
-            'response_instruction': "தமிழில் பதிலளிக்கவும் மற்றும் சட்ட பிரிவுகளை குறிப்பிடவும்."
+            "system": "நீங்கள் ஒரு சட்ட AI உதவியாளர். இந்திய குடிமக்களுக்கு அவர்களின் உரிமைகளை புரிந்துகொள்ள உதவுங்கள்.",
+            "response_instruction": "தமிழில் பதிலளிக்கவும் மற்றும் சட்ட பிரிவுகளை குறிப்பிடவும்.",
         }
     else:
         return {
-            'system': "You are a legal AI assistant helping citizens understand their rights.",
-            'response_instruction': "Answer in English and mention relevant legal sections."
+            "system": "You are a legal AI assistant helping citizens understand their rights.",
+            "response_instruction": "Answer in English and mention relevant legal sections.",
         }
+
 
 # Configure Gemini API
 def configure_gemini_api():
-    api_key = os.getenv('GEMINI_API_KEY', 'AIzaSyCjwLNN0prbAay-JhjWMWljZDTlj36DaLw')
+    api_key = os.getenv("GEMINI_API_KEY", "AIzaSyAziZo1nZgtivIYqbyQAq3fJ1cTXzH8Ivg")
     try:
         if not api_key:
             app.logger.error("GEMINI_API_KEY not found in environment variables")
@@ -199,21 +289,24 @@ def configure_gemini_api():
         app.logger.error(f"Error configuring Gemini API: {str(e)}")
         return None
 
+
 # Initialize Gemini model
 model = configure_gemini_api()
 
 # Allow loading truncated images safely
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+
 # Friendly error for oversized uploads
 @app.errorhandler(RequestEntityTooLarge)
 def handle_file_too_large(e):
-    return jsonify({'error': 'File too large. Please upload an image under 10 MB.'}), 413
+    return jsonify({"error": "File too large. Please upload an image under 10 MB."}), 413
+
 
 # Translation helper
 def translate_text(text, target_lang, model):
     try:
-        if target_lang not in ['en', 'ta'] or not text.strip():
+        if target_lang not in ["en", "ta"] or not text.strip():
             return text
         prompt = f"""Translate the following text to {'English' if target_lang=='en' else 'Tamil'} preserving legal meaning and terminology:
 
@@ -224,6 +317,7 @@ Text:
         return response.text if response and response.text else text
     except Exception:
         return text
+
 
 # PDF Parsing
 def extract_text_from_pdf(file):
@@ -237,6 +331,7 @@ def extract_text_from_pdf(file):
     except Exception as e:
         raise Exception(f"Error extracting text from PDF: {str(e)}")
 
+
 # Word Document Parsing
 def extract_text_from_docx(file):
     try:
@@ -248,22 +343,23 @@ def extract_text_from_docx(file):
     except Exception as e:
         raise Exception(f"Error extracting text from Word document: {str(e)}")
 
+
 # Legal Source Finder with Tamil Nadu Support
-def get_legal_sources(query, max_results=5):
+def get_legal_sources(query, max_results=3, fast=False):
     # National trusted sites
     national_sites = [
-        "site:indiankanoon.org", 
-        "site:gov.in", 
-        "site:prsindia.org", 
-        "site:egazette.nic.in", 
+        "site:indiankanoon.org",
+        "site:gov.in",
+        "site:prsindia.org",
+        "site:egazette.nic.in",
         "site:legislative.gov.in",
         "site:india.gov.in",
         "site:legalaffairs.gov.in",
         "site:incometax.gov.in",
         "site:gst.gov.in",
-        "site:cbic.gov.in"
+        "site:cbic.gov.in",
     ]
-    
+
     # Tamil Nadu specific sites
     tn_sites = [
         "site:tn.gov.in",
@@ -271,9 +367,9 @@ def get_legal_sources(query, max_results=5):
         "site:ctd.tn.gov.in",
         "site:tnreginet.gov.in",
         "site:tnincometax.gov.in",
-        "site:tnpolice.gov.in"
+        "site:tnpolice.gov.in",
     ]
-    
+
     all_sites = national_sites + tn_sites
     combined_sites = " OR ".join(all_sites)
 
@@ -295,101 +391,82 @@ def get_legal_sources(query, max_results=5):
         "tnreginet.gov.in",
         "tnincometax.gov.in",
         "tnpolice.gov.in",
-        "nic.in"
+        "nic.in",
     ]
     search_query = f"{query} {combined_sites}"
-    
+
     try:
-        sleep(1)  # Avoid rate limits
         trusted_links = []
 
         # Primary: DuckDuckGo API wrapper
         try:
             with DDGS() as ddgs:
                 results = ddgs.text(search_query, max_results=max_results)
-            for result in results:
-                href = result.get("href", "")
-                if not href:
-                    continue
-                hostname = urlparse(href).hostname or ""
-                if any(hostname.endswith(dom) for dom in allowed_domains):
-                    trusted_links.append(href)
+                for result in results:
+                    href = result.get("href", "")
+                    if not href:
+                        continue
+                    hostname = urlparse(str(href)).hostname or ""
+                    if any(hostname.endswith(dom) for dom in allowed_domains):
+                        trusted_links.append(href)
         except Exception:
             # Fallback: scrape DuckDuckGo HTML to avoid httpx/proxy incompatibilities
             try:
                 headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
                 }
-                resp = requests.get('https://duckduckgo.com/html/', params={'q': search_query}, headers=headers, timeout=10)
-                soup = BeautifulSoup(resp.text, 'html.parser')
-                for a in soup.select('a.result__a, a[href]'):
-                    href = a.get('href', '')
-                    if not href or href.startswith('/'):  # skip internal links
+                resp = requests.get(
+                    "https://duckduckgo.com/html/",
+                    params={"q": search_query},
+                    headers=headers,
+                    timeout=4,
+                )
+                soup = BeautifulSoup(resp.text, "html.parser")
+                for a in soup.select("a.result__a, a[href]"):
+                    href = a.get("href", "")
+                    if not isinstance(href, str) or not href or href.startswith("/"):
                         continue
-                    hostname = urlparse(href).hostname or ""
+                    hostname = urlparse(str(href)).hostname or ""
                     if any(hostname.endswith(dom) for dom in allowed_domains):
                         trusted_links.append(href)
-                        if len(trusted_links) >= max_results:
-                            break
+                    if len(trusted_links) >= max_results:
+                        break
             except Exception:
                 pass
-        
+
         # If nothing found, try expanded queries (IPC/section awareness and legal phrasing)
         if not trusted_links:
             expanded_queries = []
             # Section targeting
-            section_match = re.search(r'(?:section\s*)?(\d{1,4})', query, re.IGNORECASE)
+            section_match = re.search(r"(?:section\s*)?(\d{1,4})", query, re.IGNORECASE)
             if section_match:
                 sec = section_match.group(1)
-                expanded_queries.extend([
-                    f"IPC Section {sec}",
-                    f"Indian Penal Code Section {sec}",
-                    f"Section {sec} IPC meaning",
-                    f"Section {sec} IPC punishment"
-                ])
+                expanded_queries.extend(
+                    [
+                        f"IPC Section {sec}",
+                        f"Indian Penal Code Section {sec}",
+                        f"Section {sec} IPC meaning",
+                        f"Section {sec} IPC punishment",
+                    ]
+                )
             # IPC expansion
-            if re.search(r'\bipc\b', query, re.IGNORECASE):
-                expanded_queries.extend([
-                    "Indian Penal Code overview",
-                    "What is Indian Penal Code"
-                ])
+            if re.search(r"\bipc\b", query, re.IGNORECASE):
+                expanded_queries.extend(["Indian Penal Code overview", "What is Indian Penal Code"])
             # General legal phrasing
-            expanded_queries.extend([
-                f"{query} Indian law",
-                f"{query} legal definition India"
-            ])
-            # Try API wrapper first
+            expanded_queries.extend([f"{query} Indian law", f"{query} legal definition India"])
+            # Try API wrapper first for expanded queries as well
             try:
                 with DDGS() as ddgs:
-                    for q in expanded_queries:
-                        results2 = ddgs.text(f"{q} {combined_sites}", max_results=max_results)
-                        for r in results2:
-                            href = r.get("href", "")
-                            if not href:
-                                continue
-                            hostname = urlparse(href).hostname or ""
-                            if any(hostname.endswith(dom) for dom in allowed_domains):
-                                trusted_links.append(href)
+                    results = ddgs.text(" OR ".join(expanded_queries), max_results=max_results)
+                    for result in results:
+                        href = result.get("href", "")
+                        if not href:
+                            continue
+                        hostname = urlparse(str(href)).hostname or ""
+                        if any(hostname.endswith(dom) for dom in allowed_domains):
+                            trusted_links.append(href)
             except Exception:
-                # Fallback HTML scraping for expansions
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
-                }
-                for q in expanded_queries:
-                    try:
-                        resp = requests.get('https://duckduckgo.com/html/', params={'q': f"{q} {combined_sites}"}, headers=headers, timeout=10)
-                        soup = BeautifulSoup(resp.text, 'html.parser')
-                        for a in soup.select('a.result__a, a[href]'):
-                            href = a.get('href', '')
-                            if not href or href.startswith('/'):
-                                continue
-                            hostname = urlparse(href).hostname or ""
-                            if any(hostname.endswith(dom) for dom in allowed_domains):
-                                trusted_links.append(href)
-                                if len(trusted_links) >= max_results:
-                                    break
-                    except Exception:
-                        continue
+                pass
 
         # Deduplicate and cap
         deduped = list(dict.fromkeys(trusted_links))
@@ -397,19 +474,21 @@ def get_legal_sources(query, max_results=5):
     except Exception as e:
         raise Exception(f"Error fetching legal sources: {str(e)}")
 
+
 # Web Scraping
 def scrape_web_text(url):
     try:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
         }
         response = requests.get(url, timeout=10, headers=headers)
-        soup = BeautifulSoup(response.content, 'html.parser')
-        paragraphs = soup.find_all('p')
+        soup = BeautifulSoup(response.content, "html.parser")
+        paragraphs = soup.find_all("p")
         text = " ".join([para.get_text() for para in paragraphs])
         return text[:4000]
     except Exception:
         return ""
+
 
 # Summarize Legal Issue
 def summarize_legal_issue(document_text, query, urls, model):
@@ -443,19 +522,29 @@ def answer_legal_query_directly(query, model):
     try:
         if not query.strip():
             return "Please ask a valid legal question."
-        
-        # Simple, direct prompt for Gemini
-        prompt = f"""You are NeethiAI, a legal AI assistant specializing in Indian law. Answer this question clearly and helpfully:
+
+        # Include real-time timestamps to avoid model disclaimers
+        now = get_current_times()
+        prompt = f"""You are NeethiAI, a legal AI assistant specializing in Indian law.
+Current server time (UTC): {now['utc_iso']}
+Current server time (IST): {now['ist_iso']}
+
+Answer this question clearly and helpfully:
 
 Question: {query}
 
-Provide a clear, accurate answer about Indian law. If you mention specific laws or sections, be precise. Keep your response conversational and easy to understand."""
-        
+Provide a clear, accurate answer about Indian law using current understanding. If you mention laws or sections, be precise. Keep it conversational and easy to understand. If the question requests the current date/time, use the provided server time above instead of disclaimers."""
+
         response = model.generate_content(prompt)
-        return response.text if response.text else "I couldn't generate a response. Please try rephrasing your question."
-        
+        return (
+            response.text
+            if response.text
+            else "I couldn't generate a response. Please try rephrasing your question."
+        )
+
     except Exception as e:
         return f"I encountered an error: {str(e)}. Please try again."
+
 
 # Creator tag handling
 def is_creator_query(user_text: str) -> bool:
@@ -464,23 +553,44 @@ def is_creator_query(user_text: str) -> bool:
     text = user_text.lower().strip()
     # Fast keyword hits
     keywords = [
-        'who created you', 'who is your creator', 'creator of you', 'who made you',
-        'who developed you', 'developer of you', 'who built you',
-        'owner of you', 'who owns you', 'who is your owner',
-        'founder of neethi', 'which team created you', 'company behind you',
-        'who created neethi', 'who created neethi ai', 'who created neethiai',
-        'who developed neethi', 'who developed neethi ai', 'who developed neethiai',
-        'who built neethi', 'who built neethi ai', 'who built neethiai',
-        'who owns neethi', 'who owns neethi ai', 'who owns neethiai',
-        'which team developed neethi ai', 'which team developed neethiai',
-        'owner of neethi', 'owner of neethi ai', 'owner of neethiai',
-        'google developer team'
+        "who created you",
+        "who is your creator",
+        "creator of you",
+        "who made you",
+        "who developed you",
+        "developer of you",
+        "who built you",
+        "owner of you",
+        "who owns you",
+        "who is your owner",
+        "founder of neethi",
+        "which team created you",
+        "company behind you",
+        "who created neethi",
+        "who created neethi ai",
+        "who created neethiai",
+        "who developed neethi",
+        "who developed neethi ai",
+        "who developed neethiai",
+        "who built neethi",
+        "who built neethi ai",
+        "who built neethiai",
+        "who owns neethi",
+        "who owns neethi ai",
+        "who owns neethiai",
+        "which team developed neethi ai",
+        "which team developed neethiai",
+        "owner of neethi",
+        "owner of neethi ai",
+        "owner of neethiai",
+        "google developer team",
     ]
     if any(k in text for k in keywords):
         return True
     # Regex fallback for robustness
     try:
         import re
+
         entity = r"(you|neethi\s*ai|neethi)"
         verbs = r"(own|owns|owner|create|created|creator|develop|developed|build|built|made|make|founder)"
         pattern = rf"\b(who|which|what)\b[^\n]{0,40}?\b{verbs}\b[^\n]{0,40}?\b{entity}\b"
@@ -488,11 +598,13 @@ def is_creator_query(user_text: str) -> bool:
     except Exception:
         return False
 
+
 def get_creator_response() -> str:
     return (
         "NeethiAI was created and is maintained by Dharaanishan S and Hariharan G. "
         "They are the developers/owners behind NeethiAI."
     )
+
 
 # Tax Advisory
 def get_tax_advice(user_query, model):
@@ -517,11 +629,12 @@ def get_tax_advice(user_query, model):
     except Exception as e:
         raise Exception(f"Error generating tax advice: {str(e)}")
 
+
 # Fake Notice Detection
 def preprocess_image(image):
     # Ensure RGB
-    if image.mode != 'RGB':
-        image = image.convert('RGB')
+    if image.mode != "RGB":
+        image = image.convert("RGB")
     img = np.array(image)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # Improve contrast
@@ -530,19 +643,22 @@ def preprocess_image(image):
     _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return thresh
 
+
 def extract_text_easyocr(image):
     global reader
     try:
         # Use unique temp directory to avoid file locks
         import time
-        model_dir = os.path.join(os.getcwd(), 'easyocr_models')
-        temp_dir = os.path.join(model_dir, f'temp_{int(time.time() * 1000)}')
+
+        model_dir = os.path.join(os.getcwd(), "easyocr_models")
+        temp_dir = os.path.join(model_dir, f"temp_{int(time.time() * 1000)}")
         os.makedirs(temp_dir, exist_ok=True)
-        
+
         # Detect GPU availability (CUDA) for EasyOCR
         gpu_available = False
         try:
             import torch  # type: ignore
+
             gpu_available = bool(torch.cuda.is_available())
             if gpu_available:
                 print(f"GPU detected: {torch.cuda.get_device_name(0)}")
@@ -551,49 +667,72 @@ def extract_text_easyocr(image):
         except Exception as e:
             print(f"Torch GPU detection failed: {e}")
             gpu_available = False
-        
+
         # Additional CUDA check
         if not gpu_available:
             try:
                 import subprocess
-                result = subprocess.run(['nvidia-smi'], capture_output=True, text=True, timeout=5)
+
+                result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, timeout=5)
                 if result.returncode == 0:
                     gpu_available = True
                     print("GPU detected via nvidia-smi")
             except Exception:
                 pass
-        
+
         try:
             # For faster processing, use English-only model on CPU
             if not gpu_available:
                 print("Using English-only model for faster CPU processing")
-                reader = easyocr.Reader(['en'], gpu=False, download_enabled=True, model_storage_directory=temp_dir)
+                reader = easyocr.Reader(
+                    ["en"], gpu=False, download_enabled=True, model_storage_directory=temp_dir
+                )
                 print("EasyOCR initialized with English-only model (CPU optimized)")
             else:
                 # Try multilingual model first (English + Tamil) when GPU is available
                 print(f"Initializing EasyOCR with GPU={gpu_available}")
-                reader = easyocr.Reader(['en', 'ta'], gpu=gpu_available, download_enabled=True, model_storage_directory=temp_dir)
+                reader = easyocr.Reader(
+                    ["en", "ta"],
+                    gpu=gpu_available,
+                    download_enabled=True,
+                    model_storage_directory=temp_dir,
+                )
                 print("EasyOCR initialized successfully with multilingual model")
+
+            # Warmup to compile kernels and cache models (improves first-call latency)
+            try:
+                import numpy as _np
+
+                _warm = _np.zeros((64, 64, 3), dtype=_np.uint8)
+                _ = reader.readtext(_warm, detail=0, paragraph=False)
+                print("EasyOCR warmup completed")
+            except Exception as _w:
+                print(f"EasyOCR warmup skipped: {_w}")
         except Exception as e:
             print(f"Model initialization failed: {e}, falling back to English only")
             # Fallback to English only
-            reader = easyocr.Reader(['en'], gpu=False, download_enabled=True, model_storage_directory=temp_dir)
+            reader = easyocr.Reader(
+                ["en"], gpu=False, download_enabled=True, model_storage_directory=temp_dir
+            )
             print("EasyOCR initialized with English-only model (fallback)")
         try:
             results = reader.readtext(image, detail=0, paragraph=True)
         except Exception:
             # Reinitialize with English only and retry
-            reader = easyocr.Reader(['en'], gpu=gpu_available, download_enabled=True, model_storage_directory=temp_dir)
+            reader = easyocr.Reader(
+                ["en"], gpu=gpu_available, download_enabled=True, model_storage_directory=temp_dir
+            )
             results = reader.readtext(image, detail=0, paragraph=True)
         text = "\n".join([r.strip() for r in results if isinstance(r, str)])
-        
+
         # Clean up temp directory
         try:
             import shutil
+
             shutil.rmtree(temp_dir, ignore_errors=True)
         except:
             pass
-        
+
         # Fallback to Tesseract if EasyOCR produced little/no text
         if (not text or len(text.strip()) < 6) and _has_tesseract:
             try:
@@ -603,7 +742,8 @@ def extract_text_easyocr(image):
                     # image could be thresholded numpy already
                     pil_img = Image.fromarray(image)
                 t_text = pytesseract.image_to_string(pil_img)
-                if t_text and len(t_text.strip()) > len(text.strip() if text else 0):
+                base_len = len((text or "").strip())
+                if t_text and len(t_text.strip()) > base_len:
                     text = t_text
             except Exception:
                 pass
@@ -611,70 +751,114 @@ def extract_text_easyocr(image):
     except Exception as e:
         raise Exception(f"Error extracting text from image: {str(e)}")
 
+
+def extract_text_paddle(image: np.ndarray) -> str:
+    """Optional PaddleOCR fallback. Accepts RGB numpy image."""
+    if not _has_paddleocr:
+        return ""
+    try:
+        use_angle_cls = True
+        try:
+            import torch as _torch  # type: ignore
+
+            use_gpu = bool(_torch.cuda.is_available())
+        except Exception:
+            use_gpu = False
+        ocr = PaddleOCR(use_angle_cls=use_angle_cls, lang="en", use_gpu=use_gpu)
+        bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR) if len(image.shape) == 3 else image
+        result = ocr.ocr(bgr, cls=True)
+        lines = []
+        if result:
+            for block in result:
+                for line in block:
+                    if len(line) >= 2 and isinstance(line[1], (list, tuple)):
+                        lines.append(str(line[1][0]))
+        return "\n".join([l.strip() for l in lines if l and isinstance(l, str)])
+    except Exception:
+        return ""
+
+
 def detect_text_fraud_features(text: str):
     """Analyze extracted text for fraud indicators and return (score, reasons)."""
     if not text:
         return 0, ["No text extracted"]
-    
+
     # Suspicious keywords and phrases
     suspicious_keywords = [
-        "urgent action", "pay immediately", "legal threat", "court summon", 
-        "non-bailable", "case filed", "arrest warrant", "pay via wallet",
-        "pay via upi", "qr code payment", "immediate payment", "urgent payment",
-        "threat", "immediate action", "legal action", "court notice"
+        "urgent action",
+        "pay immediately",
+        "legal threat",
+        "court summon",
+        "non-bailable",
+        "case filed",
+        "arrest warrant",
+        "pay via wallet",
+        "pay via upi",
+        "qr code payment",
+        "immediate payment",
+        "urgent payment",
+        "threat",
+        "immediate action",
+        "legal action",
+        "court notice",
     ]
-    
+
     # Suspicious patterns
     suspicious_patterns = [
-        r'pay\s+immediately', r'urgent\s+action', r'legal\s+threat',
-        r'case\s+filed', r'non-bailable', r'arrest\s+warrant',
-        r'pay\s+via\s+(wallet|upi)', r'qr\s+code\s+payment'
+        r"pay\s+immediately",
+        r"urgent\s+action",
+        r"legal\s+threat",
+        r"case\s+filed",
+        r"non-bailable",
+        r"arrest\s+warrant",
+        r"pay\s+via\s+(wallet|upi)",
+        r"qr\s+code\s+payment",
     ]
-    
+
     # Government domain patterns (legitimate)
-    gov_domains = ['.gov.in', '.nic.in', '.tn.gov.in']
-    
+    gov_domains = [".gov.in", ".nic.in", ".tn.gov.in"]
+
     # Check for suspicious keywords
     found_keywords = [kw for kw in suspicious_keywords if kw.lower() in text.lower()]
-    
+
     # Check for suspicious patterns
     found_patterns = []
     for pattern in suspicious_patterns:
         if re.search(pattern, text, re.IGNORECASE):
             found_patterns.append(pattern)
-    
+
     # Check for missing official elements
     missing_elements = []
-    if not re.search(r'fir\s+no|gn\s+no|reference\s+no', text, re.IGNORECASE):
+    if not re.search(r"fir\s+no|gn\s+no|reference\s+no", text, re.IGNORECASE):
         missing_elements.append("No FIR/GN/Reference number")
-    
-    if not re.search(r'contact|phone|email|address', text, re.IGNORECASE):
+
+    if not re.search(r"contact|phone|email|address", text, re.IGNORECASE):
         missing_elements.append("No contact information")
-    
-    if not re.search(r'government|ministry|department', text, re.IGNORECASE):
+
+    if not re.search(r"government|ministry|department", text, re.IGNORECASE):
         missing_elements.append("No government department mentioned")
-    
+
     # Calculate fraud score
     fraud_score = 0
     fraud_reasons = []
-    
+
     if found_keywords:
         fraud_score += len(found_keywords) * 10
         fraud_reasons.append(f"Suspicious keywords: {', '.join(found_keywords)}")
-    
+
     if found_patterns:
         fraud_score += len(found_patterns) * 15
         fraud_reasons.append(f"Suspicious patterns: {', '.join(found_patterns)}")
-    
+
     if missing_elements:
         fraud_score += len(missing_elements) * 5
         fraud_reasons.append(f"Missing elements: {', '.join(missing_elements)}")
-    
+
     # Check for shortened links (suspicious)
-    if re.search(r'bit\.ly|tinyurl|goo\.gl|t\.co', text, re.IGNORECASE):
+    if re.search(r"bit\.ly|tinyurl|goo\.gl|t\.co", text, re.IGNORECASE):
         fraud_score += 20
         fraud_reasons.append("Contains shortened links (suspicious)")
-    
+
     # Normalize to 0-60 range reserved for text
     return min(int(fraud_score), 60), fraud_reasons
 
@@ -685,23 +869,29 @@ def analyze_layout(image_rgb: np.ndarray):
     try:
         gray = cv2.cvtColor(image_rgb, cv2.COLOR_BGR2GRAY)
     except Exception:
-        gray = image_rgb if len(image_rgb.shape) == 2 else cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
+        gray = (
+            image_rgb if len(image_rgb.shape) == 2 else cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
+        )
     # Binarize and count text-like contours
-    thr = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                cv2.THRESH_BINARY_INV, 31, 15)
+    thr = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 31, 15
+    )
     contours, _ = cv2.findContours(thr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     h, w = gray.shape[:2]
     text_boxes = [cv2.boundingRect(c) for c in contours if cv2.contourArea(c) > 50]
-    density = sum((bw*bh) for (x, y, bw, bh) in text_boxes) / float(h*w + 1)
-    margins_ok = True if any(y < h*0.1 for (_, y, _, _) in text_boxes) is False else False
+    density = sum((bw * bh) for (x, y, bw, bh) in text_boxes) / float(h * w + 1)
+    margins_ok = True if any(y < h * 0.1 for (_, y, _, _) in text_boxes) is False else False
     # Heuristics
     score = 0
     if density < 0.05 or density > 0.7:
-        score += 8; notes.append(f"Abnormal text density: {density:.2f}")
+        score += 8
+        notes.append(f"Abnormal text density: {density:.2f}")
     if not margins_ok:
-        score += 6; notes.append("Missing top margin (common in poor edits)")
+        score += 6
+        notes.append("Missing top margin (common in poor edits)")
     if len(text_boxes) < 5:
-        score += 4; notes.append("Too few text regions detected")
+        score += 4
+        notes.append("Too few text regions detected")
     return min(score, 20), notes
 
 
@@ -713,10 +903,12 @@ def analyze_visual_anomalies(image_rgb: np.ndarray):
         pil = Image.fromarray(image_rgb)
     bio = io.BytesIO()
     try:
-        pil.save(bio, 'JPEG', quality=90)
+        pil.save(bio, "JPEG", quality=90)
         bio.seek(0)
         recompressed = Image.open(bio)
-        ela = Image.chops.difference(pil.convert('RGB'), recompressed.convert('RGB'))
+        from PIL import ImageChops as _ImageChops
+
+        ela = _ImageChops.difference(pil.convert("RGB"), recompressed.convert("RGB"))
         stat = np.array(ela).astype(np.float32)
         mean_diff = float(stat.mean())
         # Map mean_diff to 0-20
@@ -728,8 +920,72 @@ def analyze_visual_anomalies(image_rgb: np.ndarray):
 
 
 def verify_signature_placeholder(image_rgb: np.ndarray):
-    """Placeholder for signature/face verification. Returns (score_0_10, notes)."""
-    return 0, ["Signature/face verification skipped (no reference data)"]
+    """Enhanced signature/face verification with basic CNN-like analysis. Returns (score_0_10, notes)."""
+    try:
+        # Convert to grayscale for analysis
+        if len(image_rgb.shape) == 3:
+            gray = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = image_rgb
+
+        # Detect potential signature regions using edge detection
+        edges = cv2.Canny(gray, 50, 150)
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Find signature-like regions (curved, complex contours)
+        signature_regions = []
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area > 100:  # Filter small noise
+                # Calculate contour complexity
+                perimeter = cv2.arcLength(contour, True)
+                if perimeter > 0:
+                    complexity = area / (perimeter * perimeter)
+                    if 0.01 < complexity < 0.1:  # Signature-like complexity
+                        signature_regions.append(contour)
+
+        # Analyze signature characteristics
+        score = 0
+        notes = []
+
+        if len(signature_regions) > 0:
+            notes.append(f"Found {len(signature_regions)} potential signature regions")
+
+            # Check for signature-like features
+            for region in signature_regions:
+                # Check for curved lines (signature characteristic)
+                hull = cv2.convexHull(region)
+                hull_area = cv2.contourArea(hull)
+                region_area = cv2.contourArea(region)
+
+                if region_area > 0:
+                    solidity = region_area / hull_area
+                    if solidity < 0.7:  # Signatures are typically less solid
+                        score += 2
+                        notes.append("Detected curved signature-like patterns")
+                        break
+
+            # Check for consistent stroke width (handwritten characteristic)
+            if len(signature_regions) >= 2:
+                score += 1
+                notes.append("Multiple signature strokes detected")
+        else:
+            notes.append("No signature regions detected")
+            score += 3  # Penalty for missing signature
+
+        # Check for digital manipulation indicators
+        # Look for uniform patterns that might indicate copy-paste
+        hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
+        hist_peaks = len([i for i, val in enumerate(hist) if val > hist.mean() * 2])
+
+        if hist_peaks < 5:  # Too few intensity variations
+            score += 2
+            notes.append("Uniform intensity patterns detected (possible digital manipulation)")
+
+        return min(score, 10), notes
+
+    except Exception as e:
+        return 0, [f"Signature verification failed: {str(e)}"]
 
 
 def detect_fake_notice(text: str, image_rgb: np.ndarray | None = None):
@@ -774,7 +1030,9 @@ def detect_fake_notice(text: str, image_rgb: np.ndarray | None = None):
         recommendation = "🚨 **Likely FAKE**. Do not pay. Report to cybercrime.gov.in and verify with issuing department."
     elif fraud_score >= 40:
         risk_level = "MEDIUM RISK"
-        recommendation = "⚠️ **Caution**. Cross-check with official helplines and websites before action."
+        recommendation = (
+            "⚠️ **Caution**. Cross-check with official helplines and websites before action."
+        )
     else:
         risk_level = "LOW RISK"
         recommendation = "✅ Appears legitimate, but verify via official channels before acting."
@@ -788,7 +1046,7 @@ def detect_fake_notice(text: str, image_rgb: np.ndarray | None = None):
         analysis_lines.append("Visual anomalies: " + "; ".join(visual_notes))
     if sign_notes:
         analysis_lines.append("Signature/face: " + "; ".join(sign_notes))
-    
+
     result = f"""
 ## Fraud Detection Analysis
 
@@ -806,8 +1064,28 @@ def detect_fake_notice(text: str, image_rgb: np.ndarray | None = None):
 3. If suspicious, report to cybercrime.gov.in
 4. Never make payments without verification
 """
-    
+
     return result, risk_level, fraud_score, recommendation
+
+
+def calculate_feedback_priority(
+    user_feedback: str, verification_type: str, fraud_score: int
+) -> int:
+    """Calculate priority for feedback based on verification history and fraud score."""
+    priority = 1  # Default low priority
+
+    # High priority for incorrect high-risk assessments
+    if user_feedback == "incorrect" and fraud_score >= 70:
+        priority = 3
+    # Medium priority for incorrect medium-risk assessments
+    elif user_feedback == "incorrect" and fraud_score >= 40:
+        priority = 2
+    # Medium priority for partial feedback on high-risk cases
+    elif user_feedback == "partial" and fraud_score >= 70:
+        priority = 2
+
+    return priority
+
 
 # Voice Chat Support
 def create_voice_chat_interface():
@@ -946,6 +1224,7 @@ def create_voice_chat_interface():
     """
     return voice_html
 
+
 # Offline Cached Handbook for Common FAQs
 def get_offline_handbook():
     """Offline cached handbook for common legal FAQs"""
@@ -975,7 +1254,7 @@ def get_offline_handbook():
 
 **Sources:** indiankanoon.org, tnpolice.gov.in
             """,
-            "sources": ["https://indiankanoon.org", "https://tnpolice.gov.in"]
+            "sources": ["https://indiankanoon.org", "https://tnpolice.gov.in"],
         },
         "RTI": {
             "question": "How to file RTI application?",
@@ -1005,7 +1284,7 @@ def get_offline_handbook():
 
 **Sources:** rti.gov.in, indiankanoon.org
             """,
-            "sources": ["https://rti.gov.in", "https://indiankanoon.org"]
+            "sources": ["https://rti.gov.in", "https://indiankanoon.org"],
         },
         "GST": {
             "question": "GST registration and filing process",
@@ -1035,7 +1314,7 @@ def get_offline_handbook():
 
 **Sources:** gst.gov.in, cbic.gov.in
             """,
-            "sources": ["https://gst.gov.in", "https://cbic.gov.in"]
+            "sources": ["https://gst.gov.in", "https://cbic.gov.in"],
         },
         "Income Tax": {
             "question": "Income Tax filing and deductions",
@@ -1069,70 +1348,78 @@ def get_offline_handbook():
 
 **Sources:** incometax.gov.in, cleartax.in
             """,
-            "sources": ["https://incometax.gov.in", "https://cleartax.in"]
-        }
+            "sources": ["https://incometax.gov.in", "https://cleartax.in"],
+        },
     }
+
 
 def search_offline_handbook(query):
     """Search offline handbook for quick answers"""
     handbook = get_offline_handbook()
     query_lower = query.lower()
-    
+
     for key, data in handbook.items():
         if any(word in query_lower for word in [key.lower(), data["question"].lower()]):
             return data
-    
+
     # Search in question content
     for key, data in handbook.items():
         if any(word in query_lower for word in data["question"].lower().split()):
             return data
-    
+
     return None
+
 
 # Citation Gatekeeper
 def citation_gatekeeper(response_text, sources):
     """Ensure all responses have at least one official source"""
     if not sources or len(sources) == 0:
         return "⚠️ **Unable to provide response without verified sources.** Please try rephrasing your question or contact a legal professional directly."
-    
+
     # Check if response contains source links
-    has_links = any(domain in response_text.lower() for domain in ['.gov.in', '.nic.in', 'indiankanoon.org', 'prsindia.org'])
-    
+    has_links = any(
+        domain in response_text.lower()
+        for domain in [".gov.in", ".nic.in", "indiankanoon.org", "prsindia.org"]
+    )
+
     if not has_links and sources:
         # Append sources to response
         response_text += "\n\n**📚 Trusted Sources:**\n"
         for i, source in enumerate(sources[:3], 1):
             response_text += f"{i}. [{source}]({source})\n"
-    
+
     return response_text
+
 
 def enhanced_legal_query_with_gatekeeper(query, model, force_language=None):
     """Enhanced legal query with citation gatekeeper and offline handbook"""
     try:
         if not query.strip():
             raise Exception("Query cannot be empty.")
-        
+
         # First check offline handbook
         offline_result = search_offline_handbook(query)
         if offline_result:
             return citation_gatekeeper(offline_result["answer"], offline_result["sources"])
-        
+
         # If not found in handbook, search online sources
         # If Tamil, translate query to English for better recall
         working_query = query
-        if force_language == 'ta' or detect_language(query) == 'ta':
-            working_query = translate_text(query, 'en', model)
+        if force_language == "ta" or detect_language(query) == "ta":
+            working_query = translate_text(query, "en", model)
         urls = get_legal_sources(working_query)
         if not urls:
             return "⚠️ **No verified sources found for your query.** Please try rephrasing or contact a legal professional directly."
-        
+
         for url in urls:
             text = scrape_web_text(url)
             if len(text) > 300:
                 # Detect or force language
-                language = force_language if force_language in ['ta', 'en'] else detect_language(query)
+                language = (
+                    force_language if force_language in ["ta", "en"] else detect_language(query)
+                )
                 lang_prompts = get_language_prompt(language)
-                
+
                 prompt = f"""
 {lang_prompts['system']}
 
@@ -1153,282 +1440,504 @@ def enhanced_legal_query_with_gatekeeper(query, model, force_language=None):
                 response = model.generate_content(
                     contents=[prompt],
                     generation_config=genai.types.GenerationConfig(
-                        temperature=0.3,
-                        max_output_tokens=2048
-                    )
+                        temperature=0.2, max_output_tokens=1024
+                    ),
                 )
-                
+
                 # Apply citation gatekeeper
                 final_response = citation_gatekeeper(response.text, [url])
                 # If Tamil forced, ensure output in Tamil (translate if needed)
-                if force_language == 'ta' and language != 'ta':
-                    final_response = translate_text(final_response, 'ta', model)
+                if force_language == "ta" and language != "ta":
+                    final_response = translate_text(final_response, "ta", model)
                 return final_response
-        
+
         return "⚠️ **Unable to find reliable legal sources for your query.** Please try rephrasing or contact a legal professional directly."
-        
+
     except Exception as e:
         raise Exception(f"Error answering query: {str(e)}")
 
 
-
-
-
 # Flask Routes
-@app.route('/')
+@app.route("/")
 def index():
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-    return render_template('index.html')
+        return redirect(url_for("dashboard"))
+    return render_template("index.html")
 
-@app.route('/login', methods=['GET', 'POST'])
+
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        remember = True if request.form.get('remember') else False
+    if request.method == "POST":
+        email = request.form["email"]
+        password = request.form["password"]
+        remember = True if request.form.get("remember") else False
         user = User.query.filter_by(email=email).first()
         if user and user.password_hash and check_password_hash(user.password_hash, password):
             login_user(user, remember=remember)
             user.last_login = datetime.utcnow()
             db.session.commit()
-            return redirect(url_for('dashboard'))
+            return redirect(url_for("dashboard"))
         else:
-            flash('Invalid email or password')
+            flash("Invalid email or password")
     # Unified auth page; mode via query string (?mode=register)
-    mode = request.args.get('mode', 'login')
-    return render_template('auth.html', mode=mode)
+    mode = request.args.get("mode", "login")
+    return render_template("auth.html", mode=mode)
 
-@app.route('/register', methods=['GET', 'POST'])
+
+@app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == 'POST':
-        name = request.form['name']
-        email = request.form['email']
-        password = request.form['password']
-        password_confirm = request.form.get('password_confirm', '')
+    if request.method == "POST":
+        name = request.form["name"]
+        email = request.form["email"]
+        password = request.form["password"]
+        password_confirm = request.form.get("password_confirm", "")
         if password_confirm and password != password_confirm:
-            flash('Passwords do not match')
-            return redirect(url_for('login', mode='register'))
+            flash("Passwords do not match")
+            return redirect(url_for("login", mode="register"))
         # Check if user already exists
         if User.query.filter_by(email=email).first():
-            flash('Email already registered')
-            return redirect(url_for('login', mode='register'))
+            flash("Email already registered")
+            return redirect(url_for("login", mode="register"))
         # Create new user
-        user = User(name=name, email=email, password_hash=generate_password_hash(password), auth_provider='email')
+        user = User()
+        user.name = name
+        user.email = email
+        user.password_hash = generate_password_hash(password)
+        user.auth_provider = "email"
         db.session.add(user)
         db.session.commit()
-        flash('Registration successful! Please log in.')
-        return redirect(url_for('login'))
+        flash("Registration successful! Please log in.")
+        return redirect(url_for("login"))
     # GET → unified page in register mode
-    return redirect(url_for('login', mode='register'))
+    return redirect(url_for("login", mode="register"))
+
 
 # Google OAuth Routes
-@app.route('/login/google')
+@app.route("/login/google")
 def google_login():
     # Check if Google OAuth is properly configured
-    if (os.getenv('GOOGLE_CLIENT_ID') == 'your-google-client-id' or 
-        os.getenv('GOOGLE_CLIENT_SECRET') == 'your-google-client-secret' or
-        not os.getenv('GOOGLE_CLIENT_ID') or 
-        not os.getenv('GOOGLE_CLIENT_SECRET')):
-        flash('Google OAuth is not configured. Please contact the administrator.')
-        return redirect(url_for('login'))
-    
+    if (
+        os.getenv("GOOGLE_CLIENT_ID") == "your-google-client-id"
+        or os.getenv("GOOGLE_CLIENT_SECRET") == "your-google-client-secret"
+        or not os.getenv("GOOGLE_CLIENT_ID")
+        or not os.getenv("GOOGLE_CLIENT_SECRET")
+    ):
+        flash("Google OAuth is not configured. Please contact the administrator.")
+        return redirect(url_for("login"))
+
     try:
-        redirect_uri = url_for('google_callback', _external=True)
+        redirect_uri = url_for("google_callback", _external=True)
         return google.authorize_redirect(redirect_uri)
     except Exception as e:
-        flash(f'Google OAuth error: {str(e)}')
-        return redirect(url_for('login'))
+        flash(f"Google OAuth error: {str(e)}")
+        return redirect(url_for("login"))
+
 
 # GitHub OAuth routes
-@app.route('/login/github')
+@app.route("/login/github")
 def github_login():
-    if not os.getenv('GITHUB_CLIENT_ID') or not os.getenv('GITHUB_CLIENT_SECRET'):
-        flash('GitHub OAuth is not configured. Please contact the administrator.')
-        return redirect(url_for('login'))
-    redirect_uri = url_for('github_callback', _external=True)
+    if not os.getenv("GITHUB_CLIENT_ID") or not os.getenv("GITHUB_CLIENT_SECRET"):
+        flash("GitHub OAuth is not configured. Please contact the administrator.")
+        return redirect(url_for("login"))
+    redirect_uri = url_for("github_callback", _external=True)
     return github.authorize_redirect(redirect_uri)
 
-@app.route('/callback/github')
+
+@app.route("/callback/github")
 def github_callback():
     try:
         token = github.authorize_access_token()
-        user = github.get('user').json()
-        emails = github.get('user/emails').json() or []
-        primary_email = next((e['email'] for e in emails if e.get('primary')), user.get('email'))
+        user = github.get("user").json()
+        emails = github.get("user/emails").json() or []
+        primary_email = next((e["email"] for e in emails if e.get("primary")), user.get("email"))
         if not primary_email:
-            flash('Failed to retrieve email from GitHub account')
-            return redirect(url_for('login'))
-        name = user.get('name') or user.get('login') or 'GitHub User'
+            flash("Failed to retrieve email from GitHub account")
+            return redirect(url_for("login"))
+        name = user.get("name") or user.get("login") or "GitHub User"
         user_row = User.query.filter_by(email=primary_email).first()
         if not user_row:
-            user_row = User(email=primary_email, name=name, auth_provider='github')
+            user_row = User()
+            user_row.email = primary_email
+            user_row.name = name
+            user_row.auth_provider = "github"
             db.session.add(user_row)
             db.session.commit()
         login_user(user_row)
         user_row.last_login = datetime.utcnow()
         db.session.commit()
-        return redirect(url_for('dashboard'))
+        return redirect(url_for("dashboard"))
     except Exception as e:
-        flash(f'GitHub login failed: {str(e)}')
-        return redirect(url_for('login'))
+        flash(f"GitHub login failed: {str(e)}")
+        return redirect(url_for("login"))
+
 
 # LinkedIn OAuth routes
-@app.route('/login/linkedin')
+@app.route("/login/linkedin")
 def linkedin_login():
-    if not os.getenv('LINKEDIN_CLIENT_ID') or not os.getenv('LINKEDIN_CLIENT_SECRET'):
-        flash('LinkedIn OAuth is not configured. Please contact the administrator.')
-        return redirect(url_for('login'))
-    redirect_uri = url_for('linkedin_callback', _external=True)
+    if not os.getenv("LINKEDIN_CLIENT_ID") or not os.getenv("LINKEDIN_CLIENT_SECRET"):
+        flash("LinkedIn OAuth is not configured. Please contact the administrator.")
+        return redirect(url_for("login"))
+    redirect_uri = url_for("linkedin_callback", _external=True)
     return linkedin.authorize_redirect(redirect_uri)
 
-@app.route('/callback/linkedin')
+
+@app.route("/callback/linkedin")
 def linkedin_callback():
     try:
         token = linkedin.authorize_access_token()
         # Fetch profile and email
-        profile = linkedin.get('me?projection=(id,localizedFirstName,localizedLastName)').json()
-        email_resp = linkedin.get('emailAddress?q=members&projection=(elements*(handle~))').json()
-        email_elements = (email_resp or {}).get('elements', [])
+        profile = linkedin.get("me?projection=(id,localizedFirstName,localizedLastName)").json()
+        email_resp = linkedin.get("emailAddress?q=members&projection=(elements*(handle~))").json()
+        email_elements = (email_resp or {}).get("elements", [])
         primary_email = None
         for el in email_elements:
-            handle = el.get('handle~') or {}
-            if handle.get('emailAddress'):
-                primary_email = handle.get('emailAddress')
+            handle = el.get("handle~") or {}
+            if handle.get("emailAddress"):
+                primary_email = handle.get("emailAddress")
                 break
         if not primary_email:
-            flash('Failed to retrieve email from LinkedIn account')
-            return redirect(url_for('login'))
-        name = f"{profile.get('localizedFirstName','')} {profile.get('localizedLastName','')}".strip() or 'LinkedIn User'
+            flash("Failed to retrieve email from LinkedIn account")
+            return redirect(url_for("login"))
+        name = (
+            f"{profile.get('localizedFirstName','')} {profile.get('localizedLastName','')}".strip()
+            or "LinkedIn User"
+        )
         user_row = User.query.filter_by(email=primary_email).first()
         if not user_row:
-            user_row = User(email=primary_email, name=name, auth_provider='linkedin')
+            user_row = User()
+            user_row.email = primary_email
+            user_row.name = name
+            user_row.auth_provider = "linkedin"
             db.session.add(user_row)
             db.session.commit()
         login_user(user_row)
         user_row.last_login = datetime.utcnow()
         db.session.commit()
-        return redirect(url_for('dashboard'))
+        return redirect(url_for("dashboard"))
     except Exception as e:
-        flash(f'LinkedIn login failed: {str(e)}')
-        return redirect(url_for('login'))
+        flash(f"LinkedIn login failed: {str(e)}")
+        return redirect(url_for("login"))
 
-@app.route('/callback/google')
+
+@app.route("/callback/google")
 def google_callback():
     try:
         token = google.authorize_access_token()
-        user_info = token.get('userinfo')
-        
+        user_info = token.get("userinfo")
+
         if not user_info:
-            flash('Failed to get user information from Google')
-            return redirect(url_for('login'))
-            
-        email = user_info.get('email')
-        name = user_info.get('name')
-        google_id = user_info.get('sub')
-        profile_picture = user_info.get('picture')
-            
+            flash("Failed to get user information from Google")
+            return redirect(url_for("login"))
+
+        email = user_info.get("email")
+        name = user_info.get("name")
+        google_id = user_info.get("sub")
+        profile_picture = user_info.get("picture")
+
         if not email or not name:
-            flash('Incomplete user information from Google')
-            return redirect(url_for('login'))
-            
+            flash("Incomplete user information from Google")
+            return redirect(url_for("login"))
+
         # Check if user exists
         user = User.query.filter_by(email=email).first()
-        
+
         if not user:
             # Create new user
-            user = User(
-                email=email,
-                name=name,
-                google_id=google_id,
-                profile_picture=profile_picture,
-                auth_provider='google'
-            )
+            user = User()
+            user.email = email
+            user.name = name
+            user.google_id = google_id
+            user.profile_picture = profile_picture
+            user.auth_provider = "google"
             db.session.add(user)
             db.session.commit()
         else:
             # Update existing user with Google info
             user.google_id = google_id
             user.profile_picture = profile_picture
-            user.auth_provider = 'google'
+            user.auth_provider = "google"
             db.session.commit()
-            
+
         # Login user
         login_user(user)
         user.last_login = datetime.utcnow()
         db.session.commit()
-            
-        return redirect(url_for('dashboard'))
-    
+
+        return redirect(url_for("dashboard"))
     except Exception as e:
         print(f"Google OAuth error: {str(e)}")  # Log for debugging
-        flash('Google login failed. Please try again or contact support.')
-        return redirect(url_for('login'))
+        flash("Google login failed. Please try again or contact support.")
+        return redirect(url_for("login"))
 
-@app.route('/logout')
+
+@app.route("/logout")
 @login_required
 def logout():
     logout_user()
-    return redirect(url_for('index'))
+    return redirect(url_for("index"))
 
-@app.route('/dashboard')
+
+@app.route("/dashboard")
 @login_required
 def dashboard():
     # Get recent chats
-    recent_chats = Chat.query.filter_by(user_id=current_user.id).order_by(Chat.created_at.desc()).limit(10).all()
-    return render_template('dashboard.html', chats=recent_chats)
+    recent_chats = (
+        Chat.query.filter_by(user_id=current_user.id)
+        .order_by(Chat.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    return render_template("dashboard.html", chats=recent_chats)
 
-@app.route('/chat')
+
+@app.route("/chat")
 @login_required
 def chat():
-    return render_template('chat.html')
+    return render_template("chat.html")
 
-@app.route('/api/chat', methods=['POST'])
+
+@app.route("/api/chat", methods=["POST"])
 @login_required
 def api_chat():
-    data = request.get_json()
-    question = data.get('question', '').strip()
-    force_language = data.get('force_language', '').strip().lower() if isinstance(data.get('force_language', ''), str) else None
-    
+    # Debug: Log the raw request data
+    app.logger.info(f"Raw request data: {request.get_data()}")
+    app.logger.info(f"Content-Type: {request.content_type}")
+    app.logger.info(f"Headers: {dict(request.headers)}")
+
+    data = request.get_json(silent=True) or {}
+    app.logger.info(f"Parsed JSON data: {data}")
+
+    # Accept multiple request shapes, including encrypted object with plaintext fallback
+    raw_question = (
+        data.get("question")
+        or data.get("message")
+        or data.get("prompt")
+        or data.get("q")
+        or data.get("text")
+        or data.get("content")
+        or data.get("input")
+        or data.get("query")
+        or data.get("promptText")
+        or data.get("body")
+        or ""
+    )
+    # No E2EE support; ensure question is string
+    app.logger.info(f"Raw question extracted: '{raw_question}'")
+    # OpenAI-style messages array: pick last user content
+    if (not raw_question) and isinstance(data.get("messages"), list):
+        try:
+            msgs = data.get("messages")
+            msgs = msgs if isinstance(msgs, list) else []
+            for item in reversed(msgs):
+                role = item.get("role") if isinstance(item, dict) else None
+                content = item.get("content") if isinstance(item, dict) else None
+                if role == "user" and content:
+                    raw_question = content
+                    break
+        except Exception:
+            pass
+    # Normalize question to string from various shapes
+    if isinstance(raw_question, dict):
+        raw_question = (
+            raw_question.get("text")
+            or raw_question.get("content")
+            or raw_question.get("message")
+            or raw_question.get("value")
+            or ""
+        )
+    elif isinstance(raw_question, list):
+        # Join parts if an array of segments
+        try:
+            raw_question = " ".join([str(p) for p in raw_question if p])
+        except Exception:
+            raw_question = str(raw_question)
+    question = str(raw_question or "").strip()
+
+    # Fallbacks from form, query params, or raw body if JSON missing
     if not question:
-        return jsonify({'error': 'Question cannot be empty'}), 400
-    
+        try:
+            form_q = (
+                request.form.get("question")
+                or request.form.get("message")
+                or request.form.get("input")
+                or request.form.get("text")
+                or request.form.get("content")
+                or ""
+            )
+            question = str(form_q or "").strip()
+        except Exception:
+            pass
+    if not question:
+        try:
+            arg_q = (
+                request.args.get("question")
+                or request.args.get("q")
+                or request.args.get("input")
+                or request.args.get("text")
+                or request.args.get("content")
+                or ""
+            )
+            question = str(arg_q or "").strip()
+        except Exception:
+            pass
+    if not question:
+        try:
+            raw_body = request.get_data(as_text=True) or ""
+            # If body is plain text, treat as question; if JSON string, ignore
+            if raw_body and not raw_body.strip().startswith("{"):
+                question = raw_body.strip()
+        except Exception:
+            pass
+
+    raw_force_lang = data.get("force_language", "")
+    force_language = raw_force_lang.strip().lower() if isinstance(raw_force_lang, str) else None
+    conversation_id = data.get("conversation_id", None)  # Get conversation ID from frontend
+
+    app.logger.info(f"Final question after all parsing: '{question}'")
+    if not question:
+        app.logger.error("Question is empty after all parsing attempts")
+        return jsonify({"error": "Question cannot be empty"}), 400
+
+    # Get or create conversation
+    if conversation_id:
+        conversation = Conversation.query.filter_by(
+            id=conversation_id, user_id=current_user.id, is_active=True
+        ).first()
+        if not conversation:
+            return jsonify({"error": "Conversation not found"}), 404
+    else:
+        # Create new conversation
+        conversation_title = question[:50] + "..." if len(question) > 50 else question
+        conversation = Conversation(user_id=current_user.id, title=conversation_title)
+        db.session.add(conversation)
+        db.session.commit()
+        conversation_id = conversation.id
+
     # Short-circuit for creator/owner questions
     try:
         if is_creator_query(question):
             answer = get_creator_response()
             sources = []
-            feature_used = 'about_creator'
+            feature_used = "about_creator"
             # Save to database
             chat = Chat(
                 user_id=current_user.id,
                 question=question,
                 answer=answer,
                 sources=json.dumps(sources),
-                language='en',
-                feature_used=feature_used
+                language="en",
+                feature_used=feature_used,
+                conversation_id=conversation_id,
             )
             db.session.add(chat)
             db.session.commit()
-            return jsonify({
-                'answer': answer,
-                'sources': sources,
-                'chat_id': chat.id,
-                'timestamp': datetime.utcnow().isoformat()
-            })
+            return jsonify(
+                {
+                    "answer": answer,
+                    "sources": sources,
+                    "chat_id": chat.id,
+                    "conversation_id": conversation_id,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
     except Exception:
         # If anything goes wrong, fall back to normal flow
         pass
-    
+
+    # Handle date/time questions
+    try:
+        if any(
+            keyword in question.lower()
+            for keyword in ["date", "time", "today", "current", "now", "what day", "what time"]
+        ):
+            # Get current time information
+            times = get_current_times()
+
+            # Get news if requested
+            news_items = []
+            if any(
+                keyword in question.lower() for keyword in ["news", "update", "latest", "recent"]
+            ):
+                try:
+                    news_items = fetch_official_news()
+                except Exception as e:
+                    app.logger.warning(f"Failed to fetch news: {e}")
+                    news_items = []
+            # If user also asked about GST/Tax/Budget, include filtered updates
+            try:
+                ql = question.lower()
+                if any(k in ql for k in ["gst", "tax", "budget"]):
+                    enriched = fetch_official_news()
+                    keys = ["gst", "tax", "budget"]
+                    news_items = [
+                        it
+                        for it in enriched
+                        if any(k in (it.get("title", "") or "").lower() for k in keys)
+                    ] + news_items
+            except Exception as e:
+                app.logger.warning(f"Failed to enrich time response with topical news: {e}")
+
+            # Create comprehensive response
+            answer = "📅 **Current Date & Time:**\n\n"
+            answer += f"**UTC Time:** {times['utc_iso']}\n"
+            answer += f"**IST Time:** {times['ist_iso']}\n"
+            answer += f"**Epoch (ms):** {times['epoch_ms']}\n\n"
+
+            if news_items:
+                answer += "📰 **Latest News Updates:**\n\n"
+                for i, item in enumerate(news_items[:5], 1):
+                    answer += f"{i}. **{item['title']}**\n"
+                    src = item.get("source") or ""
+                    if src:
+                        answer += f"   Source: {src}\n"
+                    answer += f"   Published: {item['published']}\n\n"
+
+            answer += "💡 *This information is updated in real-time from the server.*"
+
+            sources = []
+            feature_used = "date_time"
+
+        # Save to database
+        chat = Chat(
+            user_id=current_user.id,
+            question=question,
+            answer=answer,
+            sources=json.dumps(sources),
+            language="en",
+            feature_used=feature_used,
+            conversation_id=conversation_id,
+        )
+        db.session.add(chat)
+        db.session.commit()
+
+        return jsonify(
+            {
+                "answer": answer,
+                "sources": sources,
+                "chat_id": chat.id,
+                "conversation_id": conversation_id,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+    except Exception as e:
+        app.logger.warning(f"Date/time handling failed: {e}")
+        # Continue to normal flow
+
     try:
         # Get Gemini model
         model = configure_gemini_api()
         if not model:
-            return jsonify({'error': 'AI service unavailable'}), 500
-        
+            return jsonify({"error": "AI service unavailable"}), 500
+
         # Prefer document-grounded answer when user has uploaded a document in this session
-        language = force_language if force_language in ['ta', 'en'] else detect_language(question)
-        doc_ctx = session.get('doc_context')
+        language = force_language if force_language in ["ta", "en"] else detect_language(question)
+        # Inject current server time so the model can answer "today" correctly
+        try:
+            _times = get_current_times()
+            current_time_note = f"\n\n[Server Time] UTC: {_times['utc_iso']} | IST: {_times['ist_iso']} | epoch_ms: {_times['epoch_ms']}\n"
+        except Exception:
+            current_time_note = "\n\n[Server Time unavailable]\n"
+        doc_ctx = session.get("doc_context")
         if doc_ctx:
             try:
                 prompt = f"""
@@ -1440,6 +1949,7 @@ Relevant document content:
 {doc_ctx[:8000]}
 
 Answer clearly and helpfully. If citing laws/sections, be precise. Keep it user-friendly.
+{current_time_note}
 """
                 resp = model.generate_content(prompt)
                 answer = resp.text if resp and resp.text else "I couldn't generate a response."
@@ -1448,187 +1958,439 @@ Answer clearly and helpfully. If citing laws/sections, be precise. Keep it user-
                 except Exception:
                     urls = []
                 sources = urls
-                feature_used = 'doc_qa'
+                feature_used = "doc_qa"
             except Exception:
                 urls = get_legal_sources(question)
                 if urls:
-                    answer = enhanced_legal_query_with_gatekeeper(question, model, force_language=force_language)
+                    answer = enhanced_legal_query_with_gatekeeper(
+                        question + current_time_note, model, force_language=force_language
+                    )
                     sources = urls
                 else:
-                    answer = answer_legal_query_directly(question, model)
+                    answer = answer_legal_query_directly(question + current_time_note, model)
                     sources = []
-                feature_used = 'legal_qa'
+                feature_used = "legal_qa"
         else:
             urls = get_legal_sources(question)
             if urls:
-                answer = enhanced_legal_query_with_gatekeeper(question, model, force_language=force_language)
+                answer = enhanced_legal_query_with_gatekeeper(
+                    question + current_time_note, model, force_language=force_language
+                )
                 sources = urls
             else:
-                answer = answer_legal_query_directly(question, model)
+                answer = answer_legal_query_directly(question + current_time_note, model)
                 sources = []
-            feature_used = 'legal_qa'
-        
-        # Save to database
+            feature_used = "legal_qa"
+
+        # Save to database (store plaintext for immediate usability)
         chat = Chat(
             user_id=current_user.id,
             question=question,
-            answer=answer,
-            sources=json.dumps(sources),
+            answer=answer or "",
+            sources=json.dumps(sources or []),
             language=language,
-            feature_used=feature_used
+            feature_used=feature_used,
+            conversation_id=conversation_id,
+            chat_encrypted=False,
         )
         db.session.add(chat)
         db.session.commit()
-        
-        return jsonify({
-            'answer': answer,
-            'sources': sources,
-            'chat_id': chat.id,
-            'timestamp': datetime.utcnow().isoformat()
-        })
+
+        # Update conversation timestamp
+        conversation.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify(
+            {
+                "answer": answer,
+                "sources": sources,
+                "chat_id": chat.id,
+                "conversation_id": conversation_id,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
     except Exception as e:
         app.logger.error(f"Chat API error: {str(e)}")
         app.logger.error(f"Error type: {type(e).__name__}")
         import traceback
-        app.logger.error(f"Traceback: {traceback.format_exc()}")
-        return jsonify({'error': 'Sorry, I encountered an error. Please try again.'}), 500
 
-@app.route('/api/chat/history')
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({"error": "Sorry, I encountered an error. Please try again."}), 500
+
+
+@app.route("/api/chat/history")
 @login_required
 def chat_history():
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
-    
-    chats = Chat.query.filter_by(user_id=current_user.id)\
-                     .order_by(Chat.created_at.desc())\
-                     .paginate(page=page, per_page=per_page, error_out=False)
-    
-    return jsonify({
-        'chats': [{
-            'id': chat.id,
-            'question': chat.question,
-            'answer': chat.answer,
-            'sources': json.loads(chat.sources) if chat.sources else [],
-            'language': chat.language,
-            'feature_used': chat.feature_used,
-            'created_at': chat.created_at.isoformat()
-        } for chat in chats.items],
-        'has_next': chats.has_next,
-        'has_prev': chats.has_prev,
-        'page': page,
-        'pages': chats.pages
-    })
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
 
-@app.route('/api/chat/<int:chat_id>')
+    # Get conversations instead of individual chats
+    conversations = (
+        Conversation.query.filter_by(user_id=current_user.id, is_active=True)
+        .order_by(Conversation.updated_at.desc())
+        .paginate(page=page, per_page=per_page, error_out=False)
+    )
+
+    conversation_data = []
+    for conv in conversations.items:
+        # Get the first chat in the conversation for preview
+        first_chat = (
+            Chat.query.filter_by(conversation_id=conv.id).order_by(Chat.created_at.asc()).first()
+        )
+        chat_count = Chat.query.filter_by(conversation_id=conv.id).count()
+
+        conversation_data.append(
+            {
+                "id": conv.id,
+                "title": conv.title,
+                "created_at": conv.created_at.isoformat(),
+                "updated_at": conv.updated_at.isoformat(),
+                "chat_count": chat_count,
+                "preview": first_chat.question if first_chat else conv.title,
+            }
+        )
+
+    return jsonify(
+        {
+            "conversations": conversation_data,
+            "has_next": conversations.has_next,
+            "has_prev": conversations.has_prev,
+            "page": page,
+            "pages": conversations.pages,
+        }
+    )
+
+
+@app.route("/api/conversation/<int:conversation_id>/chats")
+@login_required
+def get_conversation_chats(conversation_id):
+    """Get all chats in a specific conversation."""
+    conversation = Conversation.query.filter_by(
+        id=conversation_id, user_id=current_user.id, is_active=True
+    ).first()
+    if not conversation:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    chats = (
+        Chat.query.filter_by(conversation_id=conversation_id).order_by(Chat.created_at.asc()).all()
+    )
+
+    chat_data = []
+    for chat in chats:
+        q = chat.question or ""
+        a = chat.answer or ""
+        sources = json.loads(chat.sources) if chat.sources else []
+        chat_data.append(
+            {
+                "id": chat.id,
+                "question": q,
+                "answer": a,
+                "sources": sources,
+                "language": chat.language,
+                "feature_used": chat.feature_used,
+                "created_at": chat.created_at.isoformat(),
+                "is_edited": chat.is_edited,
+                "edited_at": chat.edited_at.isoformat() if chat.edited_at else None,
+            }
+        )
+
+    return jsonify(
+        {
+            "conversation": {
+                "id": conversation.id,
+                "title": conversation.title,
+                "created_at": conversation.created_at.isoformat(),
+                "updated_at": conversation.updated_at.isoformat(),
+            },
+            "chats": chat_data,
+        }
+    )
+
+
+@app.route("/api/chat/<int:chat_id>")
 @login_required
 def get_chat(chat_id):
     chat = Chat.query.filter_by(id=chat_id, user_id=current_user.id).first()
     if not chat:
-        return jsonify({'error': 'Chat not found'}), 404
-    
-    return jsonify({
-        'id': chat.id,
-        'question': chat.question,
-        'answer': chat.answer,
-        'sources': json.loads(chat.sources) if chat.sources else [],
-        'language': chat.language,
-        'feature_used': chat.feature_used,
-        'created_at': chat.created_at.isoformat()
-    })
+        return jsonify({"error": "Chat not found"}), 404
 
-@app.route('/profile')
+    q = chat.question or ""
+    a = chat.answer or ""
+    sources = json.loads(chat.sources) if chat.sources else []
+    return jsonify(
+        {
+            "id": chat.id,
+            "question": q,
+            "answer": a,
+            "sources": sources,
+            "language": chat.language,
+            "feature_used": chat.feature_used,
+            "created_at": chat.created_at.isoformat(),
+        }
+    )
+
+
+@app.route("/api/chat/<int:chat_id>/delete", methods=["DELETE"])
+@login_required
+def delete_chat(chat_id):
+    """Delete a specific chat message."""
+    chat = Chat.query.filter_by(id=chat_id, user_id=current_user.id).first()
+    if not chat:
+        return jsonify({"error": "Chat not found"}), 404
+
+    try:
+        db.session.delete(chat)
+        db.session.commit()
+        return jsonify({"success": True, "message": "Chat deleted successfully"})
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Failed to delete chat"}), 500
+
+
+@app.route("/api/conversation/<int:conversation_id>/delete", methods=["DELETE"])
+@login_required
+def delete_conversation(conversation_id):
+    """Delete an entire conversation (soft delete)."""
+    conversation = Conversation.query.filter_by(
+        id=conversation_id, user_id=current_user.id, is_active=True
+    ).first()
+    if not conversation:
+        return jsonify({"error": "Conversation not found"}), 404
+
+    try:
+        conversation.is_active = False
+        db.session.commit()
+        return jsonify({"success": True, "message": "Conversation deleted successfully"})
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Failed to delete conversation"}), 500
+
+
+@app.route("/api/chat/<int:chat_id>/edit", methods=["PUT"])
+@login_required
+def edit_chat(chat_id):
+    """Edit a chat message."""
+    chat = Chat.query.filter_by(id=chat_id, user_id=current_user.id).first()
+    if not chat:
+        return jsonify({"error": "Chat not found"}), 404
+
+    data = request.get_json()
+    if not data or "question" not in data:
+        return jsonify({"error": "Question is required"}), 400
+
+    new_question = data.get("question", "").strip()
+    if not new_question:
+        return jsonify({"error": "Question cannot be empty"}), 400
+
+    try:
+        # Update the question
+        chat.question = new_question
+        chat.chat_encrypted = False
+        chat.chat_iv = None
+        chat.chat_tag = None
+        chat.is_edited = True
+        chat.edited_at = datetime.utcnow()
+
+        # Regenerate answer if requested
+        if data.get("regenerate_answer", False):
+            try:
+                model = configure_gemini_api()
+                if model:
+                    # Use the same logic as the main chat API
+                    language = detect_language(new_question)
+                    doc_ctx = session.get("doc_context")
+
+                    if doc_ctx:
+                        prompt = f"""
+You are NeethiAI, a legal AI assistant specializing in Indian law.
+
+User question: {new_question}
+
+Relevant document content:
+{doc_ctx[:8000]}
+
+Answer clearly and helpfully. If citing laws/sections, be precise. Keep it user-friendly.
+"""
+                        resp = model.generate_content(prompt)
+                        new_answer = (
+                            resp.text if resp and resp.text else "I couldn't generate a response."
+                        )
+                        chat.answer = new_answer
+                        chat.feature_used = "doc_qa"
+                    else:
+                        urls = get_legal_sources(new_question)
+                        if urls:
+                            new_answer = enhanced_legal_query_with_gatekeeper(
+                                new_question, model, force_language=language
+                            )
+                            chat.answer = new_answer
+                            chat.sources = json.dumps(urls)
+                        else:
+                            new_answer = answer_legal_query_directly(new_question, model)
+                            chat.answer = new_answer
+                            chat.sources = json.dumps([])
+                        chat.feature_used = "legal_qa"
+                else:
+                    new_answer = "AI service is currently unavailable. Please try again later."
+                    chat.answer = new_answer
+                    chat.sources = json.dumps([])
+            except Exception as e:
+                app.logger.warning(f"Failed to regenerate answer: {e}")
+                chat.answer = "Failed to regenerate answer. Please try again."
+
+        db.session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "message": "Chat updated successfully",
+                "chat": {
+                    "id": chat.id,
+                    "question": chat.question,
+                    "answer": chat.answer,
+                    "sources": json.loads(chat.sources) if chat.sources else [],
+                    "is_edited": chat.is_edited,
+                    "edited_at": chat.edited_at.isoformat() if chat.edited_at else None,
+                },
+            }
+        )
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Failed to update chat"}), 500
+
+
+@app.route("/profile")
 @login_required
 def profile():
-    return render_template('profile.html')
+    return render_template("profile.html")
 
-@app.route('/api/profile/clear-history', methods=['POST'])
+
+@app.route("/api/profile/clear-history", methods=["POST"])
 @login_required
 def clear_history():
     try:
         Chat.query.filter_by(user_id=current_user.id).delete()
         db.session.commit()
         # Clear any stored doc context
-        session.pop('doc_context', None)
-        return jsonify({'ok': True})
+        session.pop("doc_context", None)
+        return jsonify({"ok": True})
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/profile/change-password', methods=['POST'])
+
+@app.route("/api/profile/change-password", methods=["POST"])
 @login_required
 def change_password():
     data = request.get_json() or {}
-    current = data.get('current_password', '')
-    new = data.get('new_password', '')
+    current = data.get("current_password", "")
+    new = data.get("new_password", "")
     if not current or not new:
-        return jsonify({'error': 'Both current and new passwords are required'}), 400
+        return jsonify({"error": "Both current and new passwords are required"}), 400
     user = User.query.filter_by(id=current_user.id).first()
     if not user or not user.password_hash:
-        return jsonify({'error': 'Password change is not available for this account'}), 400
+        return jsonify({"error": "Password change is not available for this account"}), 400
     if not check_password_hash(user.password_hash, current):
-        return jsonify({'error': 'Current password is incorrect'}), 400
+        return jsonify({"error": "Current password is incorrect"}), 400
     user.password_hash = generate_password_hash(new)
     db.session.commit()
-    return jsonify({'ok': True})
+    return jsonify({"ok": True})
+
 
 # Forgot password inline flow, reuse unified auth page
-@app.route('/forgot-password', methods=['GET', 'POST'])
+@app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
-    if request.method == 'POST':
-        email = request.form.get('email','').strip()
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
         if not email:
-            flash('Please enter your email')
-            return render_template('auth.html', mode='forgot')
+            flash("Please enter your email")
+            return render_template("auth.html", mode="forgot")
         # In production: issue token + send email
-        flash('If this email exists, a reset link has been sent.')
-        return redirect(url_for('login'))
-    return render_template('auth.html', mode='forgot')
+        flash("If this email exists, a reset link has been sent.")
+        return redirect(url_for("login"))
+    return render_template("auth.html", mode="forgot")
 
-@app.route('/api/profile/export', methods=['GET'])
+
+@app.route("/api/profile/export", methods=["GET"])
 @login_required
 def export_chats():
     chats = Chat.query.filter_by(user_id=current_user.id).order_by(Chat.created_at.asc()).all()
     export = []
     for c in chats:
-        export.append({
-            'id': c.id,
-            'question': c.question,
-            'answer': c.answer,
-            'sources': json.loads(c.sources) if c.sources else [],
-            'language': c.language,
-            'feature_used': c.feature_used,
-            'created_at': c.created_at.isoformat()
-        })
-    return jsonify({'chats': export})
+        export.append(
+            {
+                "id": c.id,
+                "question": c.question,
+                "answer": c.answer,
+                "sources": json.loads(c.sources) if c.sources else [],
+                "language": c.language,
+                "feature_used": c.feature_used,
+                "created_at": c.created_at.isoformat(),
+            }
+        )
+    return jsonify({"chats": export})
 
-@app.route('/health')
+
+@app.route("/health")
 def health_check():
     """Health check endpoint for Render"""
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
-        'database': 'connected' if os.getenv('DATABASE_URL') else 'not_connected'
-    })
+    return jsonify(
+        {
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat(),
+            "database": "connected" if os.getenv("DATABASE_URL") else "not_connected",
+        }
+    )
+
 
 # --- Time utilities & endpoints ---
 def get_current_times():
     """Return current timestamps in UTC and IST (Asia/Kolkata)."""
     now_utc = datetime.now(timezone.utc)
     if _has_zoneinfo:
-        ist = now_utc.astimezone(ZoneInfo('Asia/Kolkata'))
+        ist = now_utc.astimezone(ZoneInfo("Asia/Kolkata"))
     else:
         # Fallback fixed offset for IST (+05:30)
         ist = now_utc.astimezone(timezone(timedelta(hours=5, minutes=30)))
     return {
-        'utc_iso': now_utc.isoformat(),
-        'ist_iso': ist.isoformat(),
-        'epoch_ms': int(now_utc.timestamp() * 1000)
+        "utc_iso": now_utc.isoformat(),
+        "ist_iso": ist.isoformat(),
+        "epoch_ms": int(now_utc.timestamp() * 1000),
     }
 
-@app.route('/api/time')
+
+@app.route("/api/time")
 def api_time():
     """Return server time in UTC and IST to enable real-time answers on the client."""
     return jsonify(get_current_times())
+
+
+# OCR benchmark endpoint (basic)
+@app.route("/api/bench/ocr", methods=["POST"])
+@login_required
+def bench_ocr():
+    try:
+        import time
+
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+        f = request.files["file"]
+        raw = f.read()
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
+        arr = np.array(img)
+        t0 = time.time()
+        _ = extract_text_easyocr(arr)
+        t1 = time.time()
+        paddle_ms = None
+        if _has_paddleocr:
+            t2 = time.time()
+            _ = extract_text_paddle(arr)
+            t3 = time.time()
+            paddle_ms = int((t3 - t2) * 1000)
+        return jsonify({"easyocr_ms": int((t1 - t0) * 1000), "paddleocr_ms": paddle_ms})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 # --- Official news (RSS) endpoint ---
 def fetch_rss_items(url, max_items=5):
@@ -1636,49 +2398,48 @@ def fetch_rss_items(url, max_items=5):
     Returns list of {title, link, published}.
     """
     try:
-        headers = {
-            'User-Agent': 'NeethiAI/1.0 (+https://neethi.ai)'
-        }
+        headers = {"User-Agent": "NeethiAI/1.0 (+https://neethi.ai)"}
         resp = requests.get(url, timeout=10, headers=headers)
         if resp.status_code != 200:
             return []
-        soup = BeautifulSoup(resp.content, 'xml')
+        soup = BeautifulSoup(resp.content, "xml")
         items = []
-        for item in soup.find_all('item')[:max_items]:
-            title = (item.title.get_text(strip=True) if item.title else '').strip()
-            link = (item.link.get_text(strip=True) if item.link else '').strip()
-            pub = ''
+        for item in soup.find_all("item")[:max_items]:
+            title = (item.title.get_text(strip=True) if item.title else "").strip()
+            link = (item.link.get_text(strip=True) if item.link else "").strip()
+            pub = ""
             if item.pubDate:
                 pub = item.pubDate.get_text(strip=True)
-            elif item.find('updated'):
-                pub = item.find('updated').get_text(strip=True)
-            items.append({'title': title, 'link': link, 'published': pub})
+            elif item.find("updated"):
+                pub = item.find("updated").get_text(strip=True)
+            items.append({"title": title, "link": link, "published": pub})
         # Atom fallback (<entry>)
         if not items:
-            for entry in soup.find_all('entry')[:max_items]:
-                title = (entry.title.get_text(strip=True) if entry.title else '').strip()
-                link_tag = entry.find('link')
-                href = link_tag.get('href') if link_tag and link_tag.has_attr('href') else ''
-                updated = (entry.updated.get_text(strip=True) if entry.find('updated') else '')
-                items.append({'title': title, 'link': href, 'published': updated})
+            for entry in soup.find_all("entry")[:max_items]:
+                title = (entry.title.get_text(strip=True) if entry.title else "").strip()
+                link_tag = entry.find("link")
+                href = link_tag.get("href") if link_tag and link_tag.has_attr("href") else ""
+                updated = entry.updated.get_text(strip=True) if entry.find("updated") else ""
+                items.append({"title": title, "link": href, "published": updated})
         return items
     except Exception:
         return []
 
-@app.route('/api/news')
+
+@app.route("/api/news")
 def api_news():
     """Aggregate headlines from official Indian government and regulator RSS feeds.
     Sources are limited to .gov.in/.nic.in and apex bodies.
     """
     feeds = [
         # Press Information Bureau (PIB)
-        'https://pib.gov.in/rssall.aspx',
+        "https://pib.gov.in/rssall.aspx",
         # RBI Press Releases
-        'https://www.rbi.org.in/Rss/PressReleaseRss.aspx',
+        "https://www.rbi.org.in/Rss/PressReleaseRss.aspx",
         # CBIC (indirect taxes) news
-        'https://www.cbic.gov.in/htdocs-cbec/rss.xml',
+        "https://www.cbic.gov.in/htdocs-cbec/rss.xml",
         # India Portal (news)
-        'https://www.india.gov.in/news_feeds?output=rss',
+        "https://www.india.gov.in/news_feeds?output=rss",
     ]
     aggregated = []
     for f in feeds:
@@ -1687,29 +2448,50 @@ def api_news():
     seen = set()
     unique = []
     for it in aggregated:
-        key = it.get('link') or it.get('title')
+        key = it.get("link") or it.get("title")
         if key and key not in seen:
             seen.add(key)
             unique.append(it)
-    return jsonify({
-        'generated_at': get_current_times(),
-        'count': len(unique),
-        'items': unique
-    })
+    return jsonify({"generated_at": get_current_times(), "count": len(unique), "items": unique})
+
+
+def fetch_official_news():
+    """Helper function to fetch official news items."""
+    feeds = [
+        "https://pib.gov.in/rssall.aspx",
+        "https://www.rbi.org.in/Rss/PressReleaseRss.aspx",
+        "https://www.cbic.gov.in/htdocs-cbec/rss.xml",
+        "https://www.india.gov.in/news_feeds?output=rss",
+    ]
+    aggregated = []
+    for f in feeds:
+        aggregated.extend(fetch_rss_items(f, max_items=5))
+
+    # De-duplicate by link
+    seen = set()
+    unique = []
+    for it in aggregated:
+        key = it.get("link") or it.get("title")
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(it)
+
+    return unique[:10]  # Return top 10 items
+
 
 # Additional API Routes
-@app.route('/api/upload/document', methods=['POST'])
+@app.route("/api/upload/document", methods=["POST"])
 @login_required
 def upload_document():
-    if 'file' not in request.files:
-        app.logger.error('Upload error: no file part in request')
-        return jsonify({'error': 'No file uploaded'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        app.logger.error('Upload error: empty filename')
-        return jsonify({'error': 'No file selected'}), 400
-    
+    if "file" not in request.files:
+        app.logger.error("Upload error: no file part in request")
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        app.logger.error("Upload error: empty filename")
+        return jsonify({"error": "No file selected"}), 400
+
     try:
         # Ensure stream is at start
         try:
@@ -1717,61 +2499,57 @@ def upload_document():
         except Exception:
             pass
 
-        if file.filename.lower().endswith('.pdf'):
+        if file.filename and file.filename.lower().endswith(".pdf"):
             text = extract_text_from_pdf(file.stream)
-        elif file.filename.lower().endswith('.docx'):
+        elif file.filename and file.filename.lower().endswith(".docx"):
             text = extract_text_from_docx(file.stream)
         else:
-            return jsonify({'error': 'Unsupported file type'}), 400
-        
+            return jsonify({"error": "Unsupported file type"}), 400
+
         # Initialize AI model for this request
         _model = configure_gemini_api()
         if not _model:
-            return jsonify({'error': 'AI service unavailable'}), 500
+            return jsonify({"error": "AI service unavailable"}), 500
 
         # Get legal sources (best effort) and generate summary
         try:
             sources = get_legal_sources("legal document summary")
         except Exception as e:
-            app.logger.warning(f'get_legal_sources failed: {e}')
+            app.logger.warning(f"get_legal_sources failed: {e}")
             sources = []
         summary = summarize_legal_issue(text, "Summarize this document", sources, _model)
-        
+
         # Also save a Chat entry for the summary so it appears in history
         summary_chat = Chat(
             user_id=current_user.id,
-            question='[Document Uploaded] Summary request',
+            question="[Document Uploaded] Summary request",
             answer=summary,
             sources=json.dumps(sources),
-            language='en',
-            feature_used='doc_summary'
+            language="en",
+            feature_used="doc_summary",
         )
         db.session.add(summary_chat)
         db.session.commit()
         chat_id = summary_chat.id
-        
-        return jsonify({
-            'text': text,
-            'summary': summary,
-            'sources': sources,
-            'chat_id': chat_id
-        })
-    except Exception as e:
-        app.logger.exception('Upload document failed')
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/detect/fake-notice', methods=['POST'])
+        return jsonify({"text": text, "summary": summary, "sources": sources, "chat_id": chat_id})
+    except Exception as e:
+        app.logger.exception("Upload document failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/detect/fake-notice", methods=["POST"])
 @login_required
 def detect_fake_notice_api():
-    if 'file' not in request.files:
-        app.logger.error('Fake-notice upload error: no file part')
-        return jsonify({'error': 'No file uploaded'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        app.logger.error('Fake-notice upload error: empty filename')
-        return jsonify({'error': 'No file selected'}), 400
-    
+    if "file" not in request.files:
+        app.logger.error("Fake-notice upload error: no file part")
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        app.logger.error("Fake-notice upload error: empty filename")
+        return jsonify({"error": "No file selected"}), 400
+
     try:
         # Read raw bytes once for reliability across WSGI servers
         try:
@@ -1785,42 +2563,58 @@ def detect_fake_notice_api():
             except Exception:
                 raw_bytes = None
         if not raw_bytes:
-            app.logger.error('Fake notice: empty file stream after read')
-            return jsonify({'error': 'Could not read uploaded image'}), 400
+            app.logger.error("Fake notice: empty file stream after read")
+            return jsonify({"error": "Could not read uploaded image"}), 400
 
         # Create a fresh BytesIO for PIL
         img_io = io.BytesIO(raw_bytes)
 
-        if file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+        if file.filename and file.filename.lower().endswith((".jpg", ".jpeg", ".png")):
             image = Image.open(img_io)
-            # Normalize size for better OCR
+            # Normalize size for better OCR - mobile images often need different handling
             if max(image.size) > 1600:
                 scale = 1600.0 / max(image.size)
-                new_size = (int(image.size[0]*scale), int(image.size[1]*scale))
+                new_size = (int(image.size[0] * scale), int(image.size[1] * scale))
                 image = image.resize(new_size, Image.Resampling.LANCZOS)
+            elif max(image.size) < 400:  # Mobile images might be too small
+                scale = 400.0 / max(image.size)
+                new_size = (int(image.size[0] * scale), int(image.size[1] * scale))
+                image = image.resize(new_size, Image.Resampling.LANCZOS)
+
             # First try OCR on the original image (RGB)
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
+            if image.mode != "RGB":
+                image = image.convert("RGB")
             np_img = np.array(image)
             text = extract_text_easyocr(np_img)
+
+            # Enhanced mobile fallback - try multiple preprocessing techniques
             if not text or len(text.strip()) < 10:
-                # Fallback to preprocessed thresholded image
+                app.logger.info("Trying enhanced preprocessing for mobile image")
+                # Try different preprocessing techniques
                 processed_image = preprocess_image(image)
                 text = extract_text_easyocr(processed_image)
-        elif file.filename.lower().endswith('.pdf'):
+
+                # If still no text, try with different preprocessing
+                if not text or len(text.strip()) < 10:
+                    # Convert to grayscale and enhance contrast
+                    gray = cv2.cvtColor(np_img, cv2.COLOR_RGB2GRAY)
+                    enhanced = cv2.equalizeHist(gray)
+                    enhanced_rgb = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2RGB)
+                    text = extract_text_easyocr(enhanced_rgb)
+        elif file.filename and file.filename.lower().endswith(".pdf"):
             # Reuse the raw bytes for PDF parsing
             text = extract_text_from_pdf(io.BytesIO(raw_bytes))
-        elif file.filename.lower().endswith('.docx'):
+        elif file.filename and file.filename.lower().endswith(".docx"):
             text = extract_text_from_docx(io.BytesIO(raw_bytes))
         else:
-            app.logger.error(f'Unsupported file type: {file.filename}')
-            return jsonify({'error': 'Unsupported file type'}), 400
-        
-        app.logger.info(f'Extracted text length: {len(text) if text else 0}')
+            app.logger.error(f"Unsupported file type: {file.filename}")
+            return jsonify({"error": "Unsupported file type"}), 400
+
+        app.logger.info(f"Extracted text length: {len(text) if text else 0}")
         app.logger.info(f'Extracted text preview: {text[:200] if text else "No text"}')
-        
+
         if not text or len(text.strip()) < 5:
-            app.logger.warning('Very little text extracted from image')
+            app.logger.warning("Very little text extracted from image")
             result_text = "⚠️ **Unable to extract sufficient text from the image.**\n\n**Possible reasons:**\n- Image quality is too low\n- Text is too small or blurry\n- Image format not supported\n- No text present in image\n\n**Please try:**\n- Using a higher quality image\n- Ensuring text is clearly visible\n- Using JPG, PNG, or PDF format"
             risk_level = "UNKNOWN"
             fraud_score = 0
@@ -1831,118 +2625,420 @@ def detect_fake_notice_api():
             try:
                 sources = get_legal_sources("fake legal notice")
             except Exception as e:
-                app.logger.warning(f'Failed to get legal sources: {e}')
+                app.logger.warning(f"Failed to get legal sources: {e}")
                 sources = []
-        
+
         # Save analysis to chat history
         try:
             saved = Chat(
                 user_id=current_user.id,
-                question='[Fake Notice] Image checked',
+                question="[Fake Notice] Image checked",
                 answer=result_text,
                 sources=json.dumps(sources),
-                language='en',
-                feature_used='fake_notice'
+                language="en",
+                feature_used="fake_notice",
             )
             db.session.add(saved)
             db.session.commit()
             chat_id = saved.id
-            app.logger.info(f'Fake notice analysis saved with chat_id: {chat_id}')
+            app.logger.info(f"Fake notice analysis saved with chat_id: {chat_id}")
         except Exception as e:
-            app.logger.error(f'Failed to save fake notice analysis: {e}')
+            app.logger.error(f"Failed to save fake notice analysis: {e}")
             chat_id = None
-        
-        return jsonify({
-            'text': text,
-            'result': result_text,
-            'risk_level': risk_level,
-            'fraud_score': fraud_score,
-            'recommendation': recommendation,
-            'sources': sources,
-            'chat_id': chat_id
-        })
-    except Exception as e:
-        app.logger.exception('Fake notice detection failed')
-        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/tax/advice', methods=['POST'])
+        return jsonify(
+            {
+                "text": text,
+                "result": result_text,
+                "risk_level": risk_level,
+                "fraud_score": fraud_score,
+                "recommendation": recommendation,
+                "sources": sources,
+                "chat_id": chat_id,
+            }
+        )
+    except Exception as e:
+        app.logger.exception("Fake notice detection failed")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/feedback/verification", methods=["POST"])
+@login_required
+def submit_verification_feedback():
+    """Submit feedback for verification results."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+
+        required_fields = ["chat_id", "verification_type", "user_feedback", "original_result"]
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        # Get the original chat record
+        chat = Chat.query.filter_by(id=data["chat_id"], user_id=current_user.id).first()
+        if not chat:
+            return jsonify({"error": "Chat record not found"}), 404
+
+        # Calculate priority based on feedback and fraud score
+        fraud_score = data.get("fraud_score", 0)
+        priority = calculate_feedback_priority(
+            data["user_feedback"], data["verification_type"], fraud_score
+        )
+
+        # Create feedback record
+        feedback = VerificationFeedback(
+            user_id=current_user.id,
+            chat_id=data["chat_id"],
+            verification_type=data["verification_type"],
+            original_result=data["original_result"],
+            user_feedback=data["user_feedback"],
+            feedback_details=data.get("feedback_details", ""),
+            priority=priority,
+        )
+
+        db.session.add(feedback)
+        db.session.commit()
+
+        app.logger.info(f"Verification feedback submitted: ID={feedback.id}, Priority={priority}")
+
+        return jsonify(
+            {
+                "success": True,
+                "feedback_id": feedback.id,
+                "priority": priority,
+                "message": "Feedback submitted successfully. Thank you for helping improve our system!",
+            }
+        )
+
+    except Exception:
+        app.logger.exception("Failed to submit verification feedback")
+        return jsonify({"error": "Failed to submit feedback"}), 500
+
+
+@app.route("/api/feedback/admin", methods=["GET"])
+@login_required
+def get_admin_feedback():
+    """Get feedback for admin review (requires admin privileges)."""
+    try:
+        # Check if user is admin (you can implement proper admin check)
+        if not current_user.email.endswith("@admin.neethiai.com"):  # Simple admin check
+            return jsonify({"error": "Admin access required"}), 403
+
+        # Get pending feedback ordered by priority
+        feedback_list = (
+            VerificationFeedback.query.filter_by(status="pending")
+            .order_by(VerificationFeedback.priority.desc(), VerificationFeedback.timestamp.desc())
+            .limit(50)
+            .all()
+        )
+
+        feedback_data = []
+        for fb in feedback_list:
+            feedback_data.append(
+                {
+                    "id": fb.id,
+                    "user_id": fb.user_id,
+                    "chat_id": fb.chat_id,
+                    "verification_type": fb.verification_type,
+                    "user_feedback": fb.user_feedback,
+                    "feedback_details": fb.feedback_details,
+                    "priority": fb.priority,
+                    "timestamp": fb.timestamp.isoformat(),
+                    "original_result": (
+                        fb.original_result[:200] + "..."
+                        if len(fb.original_result) > 200
+                        else fb.original_result
+                    ),
+                }
+            )
+
+        return jsonify(
+            {"success": True, "feedback": feedback_data, "total_pending": len(feedback_data)}
+        )
+
+    except Exception:
+        app.logger.exception("Failed to get admin feedback")
+        return jsonify({"error": "Failed to retrieve feedback"}), 500
+
+
+@app.route("/api/feedback/admin/<int:feedback_id>", methods=["POST"])
+@login_required
+def respond_to_feedback(feedback_id):
+    """Admin response to feedback."""
+    try:
+        # Check admin privileges
+        if not current_user.email.endswith("@admin.neethiai.com"):
+            return jsonify({"error": "Admin access required"}), 403
+
+        data = request.get_json()
+        if not data or "admin_response" not in data:
+            return jsonify({"error": "Admin response required"}), 400
+
+        feedback = VerificationFeedback.query.get(feedback_id)
+        if not feedback:
+            return jsonify({"error": "Feedback not found"}), 404
+
+        feedback.admin_response = data["admin_response"]
+        feedback.status = data.get("status", "reviewed")
+        if feedback.status == "resolved":
+            feedback.resolved_at = datetime.utcnow()
+
+        db.session.commit()
+
+        app.logger.info(f"Admin responded to feedback ID={feedback_id}")
+
+        return jsonify({"success": True, "message": "Response submitted successfully"})
+
+    except Exception:
+        app.logger.exception("Failed to respond to feedback")
+        return jsonify({"error": "Failed to submit response"}), 500
+
+
+@app.route("/api/tax/advice", methods=["POST"])
 @login_required
 def tax_advice():
     data = request.get_json()
-    query = data.get('query', '').strip()
-    
-    if not query:
-        return jsonify({'error': 'Query cannot be empty'}), 400
-    
-    try:
-        advice = get_tax_advice(query, model)
-        sources = get_legal_sources("tax advisory")
-        return jsonify({
-            'advice': advice,
-            'sources': sources
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    query = data.get("query", "").strip()
 
-@app.route('/api/handbook/search')
+    if not query:
+        return jsonify({"error": "Query cannot be empty"}), 400
+
+    try:
+        model = configure_gemini_api()
+        if not model:
+            return jsonify({"error": "AI service unavailable"}), 500
+        advice = get_tax_advice(query, model)
+        sources = get_legal_sources("tax advisory", fast=False)
+        return jsonify({"advice": advice, "sources": sources})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tax/calc/income", methods=["POST"])
+@login_required
+def tax_calc_income():
+    data = request.get_json() or {}
+    try:
+        taxable_income = float(data.get("income", 0))
+    except Exception:
+        return jsonify({"error": "income must be a number"}), 400
+    regime = (data.get("regime") or "new").strip().lower()  # 'new' or 'old'
+    include_cess = bool(data.get("include_cess", True))
+
+    # Basic slab calculation (FY 2024-25) for individuals; trusted slabs sourced from incometax.gov.in
+    def compute_new_regime(amount: float) -> dict:
+        slabs = [
+            (0, 300000, 0.00),
+            (300000, 600000, 0.05),
+            (600000, 900000, 0.10),
+            (900000, 1200000, 0.15),
+            (1200000, 1500000, 0.20),
+            (1500000, float("inf"), 0.30),
+        ]
+        breakdown = []
+        remaining = amount
+        tax = 0.0
+        for lower, upper, rate in slabs:
+            if amount <= lower:
+                break
+            band = min(amount, upper) - lower
+            piece = max(0.0, band) * rate
+            tax += max(0.0, piece)
+            breakdown.append(
+                {
+                    "from": lower,
+                    "to": upper if upper != float("inf") else None,
+                    "rate": rate,
+                    "tax": round(max(0.0, piece), 2),
+                }
+            )
+        return {"tax": round(tax, 2), "breakdown": breakdown}
+
+    def compute_old_regime(amount: float) -> dict:
+        slabs = [
+            (0, 250000, 0.00),
+            (250000, 500000, 0.05),
+            (500000, 1000000, 0.20),
+            (1000000, float("inf"), 0.30),
+        ]
+        breakdown = []
+        tax = 0.0
+        for lower, upper, rate in slabs:
+            if amount <= lower:
+                break
+            band = min(amount, upper) - lower
+            piece = max(0.0, band) * rate
+            tax += max(0.0, piece)
+            breakdown.append(
+                {
+                    "from": lower,
+                    "to": upper if upper != float("inf") else None,
+                    "rate": rate,
+                    "tax": round(max(0.0, piece), 2),
+                }
+            )
+        return {"tax": round(tax, 2), "breakdown": breakdown}
+
+    calc = compute_new_regime if regime == "new" else compute_old_regime
+    result = calc(max(0.0, taxable_income))
+    cess = round(result["tax"] * 0.04, 2) if include_cess else 0.0
+    total = round(result["tax"] + cess, 2)
+    sources = get_legal_sources(
+        "Income tax slabs site:incometax.gov.in", max_results=3, fast=False
+    ) or [
+        "https://www.incometax.gov.in/",
+    ]
+    return jsonify(
+        {
+            "regime": "new" if regime == "new" else "old",
+            "tax_before_cess": result["tax"],
+            "health_education_cess_4pct": cess,
+            "total_tax": total,
+            "breakdown": result["breakdown"],
+            "sources": sources,
+        }
+    )
+
+
+@app.route("/api/tax/calc/gst", methods=["POST"])
+@login_required
+def tax_calc_gst():
+    data = request.get_json() or {}
+    try:
+        amount = float(data.get("amount", 0))
+    except Exception:
+        return jsonify({"error": "amount must be a number"}), 400
+    try:
+        rate = float(data.get("rate", 18))  # 0,5,12,18,28
+    except Exception:
+        return jsonify({"error": "rate must be a number"}), 400
+    intra_state = bool(data.get("intra_state", True))
+    rate = max(0.0, min(rate, 28.0))
+    tax_amount = round(amount * (rate / 100.0), 2)
+    if intra_state:
+        cgst = round(tax_amount / 2.0, 2)
+        sgst = round(tax_amount / 2.0, 2)
+        payload = {"cgst": cgst, "sgst": sgst, "igst": 0.0}
+    else:
+        payload = {"cgst": 0.0, "sgst": 0.0, "igst": tax_amount}
+    sources = get_legal_sources(
+        "GST rates site:cbic.gov.in OR site:gst.gov.in", max_results=3, fast=False
+    ) or [
+        "https://www.cbic.gov.in/",
+        "https://www.gst.gov.in/",
+    ]
+    return jsonify(
+        {
+            "amount": amount,
+            "rate_percent": rate,
+            "tax_components": payload,
+            "total_with_tax": round(amount + tax_amount, 2),
+            "sources": sources,
+        }
+    )
+
+
+@app.route("/api/tax/budget/summary")
+def tax_budget_summary():
+    # Summarize budget-related items from official feeds only
+    feeds = [
+        "https://pib.gov.in/rssall.aspx",
+        "https://www.cbic.gov.in/htdocs-cbec/rss.xml",
+        "https://www.rbi.org.in/Rss/PressReleaseRss.aspx",
+        "https://www.india.gov.in/news_feeds?output=rss",
+    ]
+    items = []
+    for f in feeds:
+        items.extend(fetch_rss_items(f, max_items=10))
+    # Filter for budget/tax content
+    keys = ["budget", "finance", "tax", "gst", "income tax", "direct tax", "indirect tax"]
+    filtered = []
+    for it in items:
+        title = (it.get("title") or "").lower()
+        if any(k in title for k in keys):
+            filtered.append(it)
+    # Summarize titles via model (official links only)
+    model_local = configure_gemini_api()
+    summary = ""
+    if model_local and filtered:
+        try:
+            joined = "\n".join([f"- {it['title']}" for it in filtered if it.get("title")])
+            prompt = f"""Summarize the following official budget/tax updates for Indian taxpayers in 6-10 concise bullet points, plain language:\n\n{joined}\n\nKeep neutral tone and avoid speculation."""
+            resp = model_local.generate_content(prompt)
+            summary = resp.text if resp and resp.text else ""
+        except Exception:
+            summary = ""
+    return jsonify(
+        {
+            "generated_at": get_current_times(),
+            "count": len(filtered),
+            "summary": summary,
+            "items": filtered[:20],
+        }
+    )
+
+
+@app.route("/api/handbook/search")
 @login_required
 def search_handbook():
-    query = request.args.get('q', '').strip()
-    
+    query = request.args.get("q", "").strip()
+
     if not query:
-        return jsonify({'error': 'Query cannot be empty'}), 400
-    
+        return jsonify({"error": "Query cannot be empty"}), 400
+
     result = search_offline_handbook(query)
-    
+
     if result:
-        return jsonify({
-            'found': True,
-            'question': result['question'],
-            'answer': result['answer'],
-            'sources': result['sources']
-        })
+        return jsonify(
+            {
+                "found": True,
+                "question": result["question"],
+                "answer": result["answer"],
+                "sources": result["sources"],
+            }
+        )
     else:
-        return jsonify({
-            'found': False,
-            'message': 'No matching entry found in the handbook'
-        })
+        return jsonify({"found": False, "message": "No matching entry found in the handbook"})
+
 
 # Initialize database and run app
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Get port from environment variable (Render sets this)
-    port = int(os.getenv('PORT', 5000))
-    
+    port = int(os.getenv("PORT", 5000))
+
     # Check if running in production
-    is_production = os.getenv('FLASK_ENV') == 'production'
-    
+    is_production = os.getenv("FLASK_ENV") == "production"
+
     # Try to create database tables, but don't fail if database is not available
     try:
         with app.app_context():
             db.create_all()
-            print("✅ Database tables created successfully")
+            print("Database tables created successfully")
     except Exception as e:
-        print(f"⚠️  Database connection failed: {e}")
+        print(f"Database connection failed: {e}")
         if is_production:
-            print("⚠️  Starting in production mode with limited functionality...")
-            print("💡 Database will be available when connection is restored")
+            print("Starting in production mode with limited functionality...")
+            print("Database will be available when connection is restored")
         else:
-            print("⚠️  Continuing in development mode without database...")
-    
+            print("Continuing in development mode without database...")
+
     if is_production:
-        print("🚀 Starting NeethiAI in Production Mode...")
-        print(f"🌐 Binding to host: 0.0.0.0, port: {port}")
+        print("Starting NeethiAI in Production Mode...")
+        print(f"Binding to host: 0.0.0.0, port: {port}")
         # Use waitress for production (stable configuration)
         try:
             from waitress import serve
-            print("✅ Waitress imported successfully")
-            serve(app, host='0.0.0.0', port=port, threads=4)
-        except Exception as e:
-            print(f"❌ Error starting server: {e}")
-            print("🔄 Falling back to Flask development server...")
-            app.run(debug=False, host='0.0.0.0', port=port, use_reloader=False)
-    else:
-        print("🚀 Starting NeethiAI Flask Application...")
-        print(f"📱 Open your browser and go to: http://localhost:{port}")
-        # Run without auto-reloader to avoid upload interruptions
-        app.run(debug=False, host='0.0.0.0', port=port, use_reloader=False)
 
+            print("Waitress imported successfully")
+            serve(app, host="0.0.0.0", port=port, threads=4)
+        except Exception as e:
+            print(f"Error starting server: {e}")
+            print("Falling back to Flask development server...")
+            app.run(debug=False, host="0.0.0.0", port=port, use_reloader=False)
+    else:
+        print("Starting NeethiAI Flask Application...")
+        print(f"Open your browser and go to: http://localhost:{port}")
+        # Run without auto-reloader to avoid upload interruptions
+        app.run(debug=False, host="0.0.0.0", port=port, use_reloader=False)

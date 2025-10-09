@@ -1,7 +1,7 @@
 # NeethiAI - Legal AI Assistant
 
 <div align="center">
-  <img src="static/icons/Logo.png" alt="NeethiAI Logo" width="100" height="100">
+  <img src="static/icons/logo.jpg" alt="NeethiAI Logo" width="100" height="100">
   <h3>உங்கள் சட்ட AI உதவியாளர்</h3>
   <p>AI-powered legal assistant for Tamil and English queries with document analysis</p>
   
@@ -26,6 +26,7 @@
 ## 🚀 Quick Start
 
 ### Prerequisites
+
 - Python 3.8+
 - PostgreSQL 12+
 - Google Gemini API key
@@ -33,12 +34,14 @@
 ### Local Development
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/yourusername/neethiai.git
    cd neethiai
    ```
 
 2. **Create virtual environment**
+
    ```bash
    python -m venv neethi_env
    # Windows
@@ -48,17 +51,20 @@
    ```
 
 3. **Install dependencies**
+
    ```bash
    pip install -r requirements.txt
    ```
 
 4. **Set up environment variables**
+
    ```bash
    cp env.example .env
    # Edit .env with your API keys
    ```
 
 5. **Set up PostgreSQL database**
+
    ```sql
    CREATE DATABASE neethi_ai;
    CREATE USER neethi_user WITH PASSWORD 'your_password';
@@ -66,6 +72,7 @@
    ```
 
 6. **Run the application**
+
    ```bash
    python neethi.py
    ```
@@ -78,9 +85,11 @@
 ## 🌐 Deployment on Render
 
 ### One-Click Deploy
+
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
 
 ### Manual Deployment
+
 1. Fork this repository
 2. Create a Render account
 3. Create a PostgreSQL database
@@ -93,6 +102,7 @@ See [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) for detailed instructions.
 ## 🔧 Configuration
 
 ### Environment Variables
+
 ```bash
 # Required
 GEMINI_API_KEY=your-gemini-api-key
@@ -105,6 +115,7 @@ DATABASE_URL=postgresql://user:pass@host:port/db
 ```
 
 ### API Keys Setup
+
 1. **Google Gemini**: Get from [Google AI Studio](https://makersuite.google.com/app/apikey)
 2. **Google OAuth**: Get from [Google Cloud Console](https://console.cloud.google.com/)
 
@@ -127,7 +138,7 @@ neethiai/
 ├── Procfile              # Alternative deployment
 ├── static/               # Static assets
 │   ├── icons/
-│   │   └── Logo.png      # App logo
+│   │   └── logo.jpg      # App logo
 │   ├── css/
 │   │   └── style.css     # Custom styles
 │   └── manifest.json     # PWA manifest
