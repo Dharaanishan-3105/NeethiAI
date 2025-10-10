@@ -3,8 +3,8 @@ services:
     name: neethi-ai
     env: python
     plan: starter
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-    startCommand: python neethi.py
+    buildCommand: pip install --upgrade pip && pip install -r requirements-prod.txt
+    startCommand: waitress-serve --host=0.0.0.0 --port=$PORT neethi:app
     envVars:
       - key: FLASK_ENV
         value: production

@@ -3064,21 +3064,13 @@ if __name__ == "__main__":
         else:
             print("Continuing in development mode without database...")
 
-    if is_production:
-        print("Starting NeethiAI in Production Mode...")
-        print(f"Binding to host: 0.0.0.0, port: {port}")
-        # Use waitress for production (stable configuration)
-        try:
-            from waitress import serve
-
-            print("Waitress imported successfully")
-            serve(app, host="0.0.0.0", port=port, threads=4)
-        except Exception as e:
-            print(f"Error starting server: {e}")
-            print("Falling back to Flask development server...")
-            app.run(debug=False, host="0.0.0.0", port=port, use_reloader=False)
-    else:
+    # Only run Flask dev server if not in production
+    # In production, Waitress will handle the server
+    if not is_production:
         print("Starting NeethiAI Flask Application...")
         print(f"Open your browser and go to: http://localhost:{port}")
         # Run without auto-reloader to avoid upload interruptions
         app.run(debug=False, host="0.0.0.0", port=port, use_reloader=False)
+    else:
+        print("NeethiAI configured for production deployment")
+        print("Application will be served by Waitress")
