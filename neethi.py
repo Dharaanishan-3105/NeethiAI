@@ -86,7 +86,7 @@ app.config["SECRET_KEY"] = os.getenv(
 )
 
 # Database configuration - use Render's DATABASE_URL if available
-database_url = os.getenv("DATABASE_URL")
+database_url = os.getenv("postgresql://neethi_user:OOO2MrT8diKahlqR12mMmoqp0zQFBGvG@dpg-d32p7vmmcj7s739q9f4g-a.oregon-postgres.render.com/neethi_ai_e3pa")
 if database_url:
     # Render provides DATABASE_URL, use it directly
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
@@ -157,7 +157,7 @@ linkedin = cast(
         access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
         authorize_url="https://www.linkedin.com/oauth/v2/authorization",
         api_base_url="https://api.linkedin.com/v2/",
-        client_kwargs={
+    client_kwargs={
             "scope": "r_liteprofile r_emailaddress",
             "token_endpoint_auth_method": "client_secret_post",
         },
@@ -177,7 +177,7 @@ class User(UserMixin, db.Model):
     last_login = db.Column(db.DateTime)
     is_active = db.Column(db.Boolean, default=True)
     auth_provider = db.Column(db.String(20), default="email")  # 'email' or 'google'
-
+    
     # Relationship to chats
     chats = db.relationship("Chat", backref="user", lazy=True, cascade="all, delete-orphan")
 
@@ -192,7 +192,7 @@ class Chat(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     feature_used = db.Column(db.String(50))  # Which feature was used
     conversation_id = db.Column(
-        db.Integer, db.ForeignKey("conversation.id"), nullable=True
+        db.Integer, db.ForeignKey("conversation.id"), nullable=True, default=None
     )  # Link to conversation
     is_edited = db.Column(db.Boolean, default=False)  # Track if message was edited
     edited_at = db.Column(db.DateTime)  # When it was edited
@@ -348,10 +348,10 @@ def extract_text_from_docx(file):
 def get_legal_sources(query, max_results=3, fast=False):
     # National trusted sites
     national_sites = [
-        "site:indiankanoon.org",
-        "site:gov.in",
-        "site:prsindia.org",
-        "site:egazette.nic.in",
+        "site:indiankanoon.org", 
+        "site:gov.in", 
+        "site:prsindia.org", 
+        "site:egazette.nic.in", 
         "site:legislative.gov.in",
         "site:india.gov.in",
         "site:legalaffairs.gov.in",
@@ -359,7 +359,7 @@ def get_legal_sources(query, max_results=3, fast=False):
         "site:gst.gov.in",
         "site:cbic.gov.in",
     ]
-
+    
     # Tamil Nadu specific sites
     tn_sites = [
         "site:tn.gov.in",
@@ -369,7 +369,7 @@ def get_legal_sources(query, max_results=3, fast=False):
         "site:tnincometax.gov.in",
         "site:tnpolice.gov.in",
     ]
-
+    
     all_sites = national_sites + tn_sites
     combined_sites = " OR ".join(all_sites)
 
@@ -394,7 +394,7 @@ def get_legal_sources(query, max_results=3, fast=False):
         "nic.in",
     ]
     search_query = f"{query} {combined_sites}"
-
+    
     try:
         trusted_links = []
 
@@ -522,7 +522,7 @@ def answer_legal_query_directly(query, model):
     try:
         if not query.strip():
             return "Please ask a valid legal question."
-
+        
         # Include real-time timestamps to avoid model disclaimers
         now = get_current_times()
         prompt = f"""You are NeethiAI, a legal AI assistant specializing in Indian law.
@@ -534,14 +534,14 @@ Answer this question clearly and helpfully:
 Question: {query}
 
 Provide a clear, accurate answer about Indian law using current understanding. If you mention laws or sections, be precise. Keep it conversational and easy to understand. If the question requests the current date/time, use the provided server time above instead of disclaimers."""
-
+        
         response = model.generate_content(prompt)
         return (
             response.text
             if response.text
             else "I couldn't generate a response. Please try rephrasing your question."
         )
-
+        
     except Exception as e:
         return f"I encountered an error: {str(e)}. Please try again."
 
@@ -713,6 +713,7 @@ def extract_text_easyocr(image):
                 ["en"], gpu=False, download_enabled=True, model_storage_directory=model_dir
             )
             print("EasyOCR initialized with English-only model (fallback)")
+        
         try:
             results = reader.readtext(image, detail=0, paragraph=True)
         except Exception:
@@ -783,7 +784,7 @@ def detect_text_fraud_features(text: str):
     """Analyze extracted text for fraud indicators and return (score, reasons)."""
     if not text:
         return 0, ["No text extracted"]
-
+    
     # Suspicious keywords and phrases
     suspicious_keywords = [
         "urgent action",
@@ -803,7 +804,7 @@ def detect_text_fraud_features(text: str):
         "legal action",
         "court notice",
     ]
-
+    
     # Suspicious patterns
     suspicious_patterns = [
         r"pay\s+immediately",
@@ -815,51 +816,51 @@ def detect_text_fraud_features(text: str):
         r"pay\s+via\s+(wallet|upi)",
         r"qr\s+code\s+payment",
     ]
-
+    
     # Government domain patterns (legitimate)
     gov_domains = [".gov.in", ".nic.in", ".tn.gov.in"]
-
+    
     # Check for suspicious keywords
     found_keywords = [kw for kw in suspicious_keywords if kw.lower() in text.lower()]
-
+    
     # Check for suspicious patterns
     found_patterns = []
     for pattern in suspicious_patterns:
         if re.search(pattern, text, re.IGNORECASE):
             found_patterns.append(pattern)
-
+    
     # Check for missing official elements
     missing_elements = []
     if not re.search(r"fir\s+no|gn\s+no|reference\s+no", text, re.IGNORECASE):
         missing_elements.append("No FIR/GN/Reference number")
-
+    
     if not re.search(r"contact|phone|email|address", text, re.IGNORECASE):
         missing_elements.append("No contact information")
-
+    
     if not re.search(r"government|ministry|department", text, re.IGNORECASE):
         missing_elements.append("No government department mentioned")
-
+    
     # Calculate fraud score
     fraud_score = 0
     fraud_reasons = []
-
+    
     if found_keywords:
         fraud_score += len(found_keywords) * 10
         fraud_reasons.append(f"Suspicious keywords: {', '.join(found_keywords)}")
-
+    
     if found_patterns:
         fraud_score += len(found_patterns) * 15
         fraud_reasons.append(f"Suspicious patterns: {', '.join(found_patterns)}")
-
+    
     if missing_elements:
         fraud_score += len(missing_elements) * 5
         fraud_reasons.append(f"Missing elements: {', '.join(missing_elements)}")
-
+    
     # Check for shortened links (suspicious)
     if re.search(r"bit\.ly|tinyurl|goo\.gl|t\.co", text, re.IGNORECASE):
         fraud_score += 20
         fraud_reasons.append("Contains shortened links (suspicious)")
-
+    
     # Normalize to 0-60 range reserved for text
     return min(int(fraud_score), 60), fraud_reasons
 
@@ -1047,7 +1048,7 @@ def detect_fake_notice(text: str, image_rgb: np.ndarray | None = None):
         analysis_lines.append("Visual anomalies: " + "; ".join(visual_notes))
     if sign_notes:
         analysis_lines.append("Signature/face: " + "; ".join(sign_notes))
-
+    
     result = f"""
 ## Fraud Detection Analysis
 
@@ -1065,7 +1066,7 @@ def detect_fake_notice(text: str, image_rgb: np.ndarray | None = None):
 3. If suspicious, report to cybercrime.gov.in
 4. Never make payments without verification
 """
-
+    
     return result, risk_level, fraud_score, recommendation
 
 
@@ -1358,16 +1359,16 @@ def search_offline_handbook(query):
     """Search offline handbook for quick answers"""
     handbook = get_offline_handbook()
     query_lower = query.lower()
-
+    
     for key, data in handbook.items():
         if any(word in query_lower for word in [key.lower(), data["question"].lower()]):
             return data
-
+    
     # Search in question content
     for key, data in handbook.items():
         if any(word in query_lower for word in data["question"].lower().split()):
             return data
-
+    
     return None
 
 
@@ -1376,19 +1377,19 @@ def citation_gatekeeper(response_text, sources):
     """Ensure all responses have at least one official source"""
     if not sources or len(sources) == 0:
         return "⚠️ **Unable to provide response without verified sources.** Please try rephrasing your question or contact a legal professional directly."
-
+    
     # Check if response contains source links
     has_links = any(
         domain in response_text.lower()
         for domain in [".gov.in", ".nic.in", "indiankanoon.org", "prsindia.org"]
     )
-
+    
     if not has_links and sources:
         # Append sources to response
         response_text += "\n\n**📚 Trusted Sources:**\n"
         for i, source in enumerate(sources[:3], 1):
             response_text += f"{i}. [{source}]({source})\n"
-
+    
     return response_text
 
 
@@ -1397,12 +1398,12 @@ def enhanced_legal_query_with_gatekeeper(query, model, force_language=None):
     try:
         if not query.strip():
             raise Exception("Query cannot be empty.")
-
+        
         # First check offline handbook
         offline_result = search_offline_handbook(query)
         if offline_result:
             return citation_gatekeeper(offline_result["answer"], offline_result["sources"])
-
+        
         # If not found in handbook, search online sources
         # If Tamil, translate query to English for better recall
         working_query = query
@@ -1411,7 +1412,7 @@ def enhanced_legal_query_with_gatekeeper(query, model, force_language=None):
         urls = get_legal_sources(working_query)
         if not urls:
             return "⚠️ **No verified sources found for your query.** Please try rephrasing or contact a legal professional directly."
-
+        
         for url in urls:
             text = scrape_web_text(url)
             if len(text) > 300:
@@ -1420,7 +1421,7 @@ def enhanced_legal_query_with_gatekeeper(query, model, force_language=None):
                     force_language if force_language in ["ta", "en"] else detect_language(query)
                 )
                 lang_prompts = get_language_prompt(language)
-
+                
                 prompt = f"""
 {lang_prompts['system']}
 
@@ -1444,16 +1445,16 @@ def enhanced_legal_query_with_gatekeeper(query, model, force_language=None):
                         temperature=0.2, max_output_tokens=1024
                     ),
                 )
-
+                
                 # Apply citation gatekeeper
                 final_response = citation_gatekeeper(response.text, [url])
                 # If Tamil forced, ensure output in Tamil (translate if needed)
                 if force_language == "ta" and language != "ta":
                     final_response = translate_text(final_response, "ta", model)
                 return final_response
-
+        
         return "⚠️ **Unable to find reliable legal sources for your query.** Please try rephrasing or contact a legal professional directly."
-
+        
     except Exception as e:
         raise Exception(f"Error answering query: {str(e)}")
 
@@ -1483,7 +1484,7 @@ def login():
     # Unified auth page; mode via query string (?mode=register)
     mode = request.args.get("mode", "login")
     return render_template("auth.html", mode=mode)
-
+    
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -1511,7 +1512,7 @@ def register():
         return redirect(url_for("login"))
     # GET → unified page in register mode
     return redirect(url_for("login", mode="register"))
-
+        
 
 # Google OAuth Routes
 @app.route("/login/google")
@@ -1638,10 +1639,10 @@ def google_callback():
         if not email or not name:
             flash("Incomplete user information from Google")
             return redirect(url_for("login"))
-
+            
         # Check if user exists
         user = User.query.filter_by(email=email).first()
-
+        
         if not user:
             # Create new user
             user = User()
@@ -1658,12 +1659,12 @@ def google_callback():
             user.profile_picture = profile_picture
             user.auth_provider = "google"
             db.session.commit()
-
+        
         # Login user
         login_user(user)
         user.last_login = datetime.utcnow()
         db.session.commit()
-
+        
         return redirect(url_for("dashboard"))
     except Exception as e:
         print(f"Google OAuth error: {str(e)}")  # Log for debugging
@@ -1845,6 +1846,11 @@ def api_chat():
         # If anything goes wrong, fall back to normal flow
         pass
 
+    # Prepare defaults to avoid UnboundLocalError in later branches
+    answer = None
+    sources = []
+    feature_used = "legal_qa"
+
     # Handle date/time questions
     try:
         if any(
@@ -1926,7 +1932,7 @@ def api_chat():
     except Exception as e:
         app.logger.warning(f"Date/time handling failed: {e}")
         # Continue to normal flow
-
+    
     try:
         # Get Gemini model
         model = configure_gemini_api()
@@ -1990,19 +1996,25 @@ Answer clearly and helpfully. If citing laws/sections, be precise. Keep it user-
         chat = Chat(
             user_id=current_user.id,
             question=question,
-            answer=answer or "",
+            answer=answer or "No response generated",
             sources=json.dumps(sources or []),
             language=language,
             feature_used=feature_used,
             conversation_id=conversation_id,
             chat_encrypted=False,
         )
-        db.session.add(chat)
-        db.session.commit()
-
-        # Update conversation timestamp
-        conversation.updated_at = datetime.utcnow()
-        db.session.commit()
+        try:
+            db.session.add(chat)
+            db.session.commit()
+            
+            # Update conversation timestamp
+            conversation.updated_at = datetime.utcnow()
+            db.session.commit()
+        except Exception as db_error:
+            app.logger.error(f"Database error: {db_error}")
+            db.session.rollback()
+            # Return error response instead of crashing
+            return jsonify({"error": "Database error occurred. Please try again."}), 500
 
         return jsonify(
             {
@@ -2017,7 +2029,6 @@ Answer clearly and helpfully. If citing laws/sections, be precise. Keep it user-
         app.logger.error(f"Chat API error: {str(e)}")
         app.logger.error(f"Error type: {type(e).__name__}")
         import traceback
-
         app.logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({"error": "Sorry, I encountered an error. Please try again."}), 500
 
@@ -2032,7 +2043,7 @@ def chat_history():
     conversations = (
         Conversation.query.filter_by(user_id=current_user.id, is_active=True)
         .order_by(Conversation.updated_at.desc())
-        .paginate(page=page, per_page=per_page, error_out=False)
+                     .paginate(page=page, per_page=per_page, error_out=False)
     )
 
     conversation_data = []
@@ -2817,10 +2828,10 @@ def respond_to_feedback(feedback_id):
 def tax_advice():
     data = request.get_json()
     query = data.get("query", "").strip()
-
+    
     if not query:
         return jsonify({"error": "Query cannot be empty"}), 400
-
+    
     try:
         model = configure_gemini_api()
         if not model:
@@ -3000,12 +3011,12 @@ def tax_budget_summary():
 @login_required
 def search_handbook():
     query = request.args.get("q", "").strip()
-
+    
     if not query:
         return jsonify({"error": "Query cannot be empty"}), 400
-
+    
     result = search_offline_handbook(query)
-
+    
     if result:
         return jsonify(
             {
