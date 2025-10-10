@@ -2,7 +2,7 @@
 block content %}
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <div class="chat-container">
-  <!-- Sidebar -->
+    <!-- Sidebar -->
   <!-- Mobile menu button -->
   <button
     class="mobile-menu-btn"
@@ -18,21 +18,21 @@ block content %}
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
 
   <div class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-      <button class="new-chat-btn" onclick="startNewChat()">
-        <i class="fas fa-plus"></i>
-        New chat
-      </button>
+        <div class="sidebar-header">
+            <button class="new-chat-btn" onclick="startNewChat()">
+                <i class="fas fa-plus"></i>
+                New chat
+            </button>
+        </div>
+        <div class="chat-history" id="chatHistory">
+            <!-- Chat history will be loaded here -->
+        </div>
     </div>
-    <div class="chat-history" id="chatHistory">
-      <!-- Chat history will be loaded here -->
-    </div>
-  </div>
 
-  <!-- Main Chat Area -->
-  <div class="main-chat">
-    <!-- Chat Header -->
-    <div class="chat-header">
+    <!-- Main Chat Area -->
+    <div class="main-chat">
+        <!-- Chat Header -->
+        <div class="chat-header">
       <div
         style="
           display: flex;
@@ -42,8 +42,8 @@ block content %}
         "
       >
         <div>
-          <h1>NeethiAI</h1>
-          <p>Your Legal AI Assistant</p>
+            <h1>NeethiAI</h1>
+            <p>Your Legal AI Assistant</p>
         </div>
         <div style="display: flex; align-items: center; gap: 8px">
           <div class="btn-group" role="group" aria-label="Language toggle">
@@ -72,47 +72,37 @@ block content %}
               AUTO
             </button>
           </div>
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-light"
-            id="stopTTS"
-            onclick="stopSpeaking()"
-            title="Stop voice"
-            style="display: none"
-          >
-            <i class="fas fa-stop"></i>
-          </button>
-          <!-- Removed test voice button per request -->
+          <!-- Removed stop button and test voice button per request -->
         </div>
       </div>
-    </div>
+        </div>
 
-    <!-- Chat Messages -->
-    <div class="chat-messages" id="chatMessages">
-      <div class="welcome-message">
-        <div class="message assistant">
-          <div class="message-content">
-            <h3>Welcome to NeethiAI! 👋</h3>
+        <!-- Chat Messages -->
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+                <div class="message assistant">
+                    <div class="message-content">
+                        <h3>Welcome to NeethiAI! 👋</h3>
             <p>
               I'm your legal AI assistant specializing in Indian law. I can help
               you with:
             </p>
-            <ul>
-              <li>Legal questions and advice</li>
-              <li>Document analysis</li>
-              <li>Tax advisory</li>
-              <li>Fake notice detection</li>
-            </ul>
-            <p>What would you like to know?</p>
-          </div>
+                        <ul>
+                            <li>Legal questions and advice</li>
+                            <li>Document analysis</li>
+                            <li>Tax advisory</li>
+                            <li>Fake notice detection</li>
+                        </ul>
+                        <p>What would you like to know?</p>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Chat Input -->
-    <div class="chat-input-container">
-      <div class="chat-input-wrapper">
-        <div class="input-group">
+        <!-- Chat Input -->
+        <div class="chat-input-container">
+            <div class="chat-input-wrapper">
+                <div class="input-group">
           <input
             type="file"
             id="fileInput"
@@ -127,13 +117,13 @@ block content %}
           >
             <i class="fas fa-paperclip"></i>
           </button>
-          <textarea
-            id="messageInput"
+                    <textarea 
+                        id="messageInput" 
             class="form-control"
-            placeholder="Ask me anything about Indian law..."
-            rows="1"
-            maxlength="4000"
-          ></textarea>
+                        placeholder="Ask me anything about Indian law..." 
+                        rows="1"
+                        maxlength="4000"
+                    ></textarea>
           <button id="voiceButton" title="Voice input" onclick="toggleVoice()">
             <i class="fas fa-microphone"></i>
           </button>
@@ -144,25 +134,17 @@ block content %}
             <span class="voice-bar"></span>
             <span class="voice-bar"></span>
           </div>
-          <button
-            id="stopTTS"
-            onclick="stopTTS()"
-            style="display: none"
-            title="Stop Voice"
-            class="btn-stop-tts"
-          >
-            <i class="fas fa-stop"></i>
-          </button>
+          <!-- Removed sidebar stop button per request -->
           <button
             id="sendButton"
             class="btn-send"
             onclick="sendMessage()"
             disabled
           >
-            <i class="fas fa-paper-plane"></i>
-          </button>
-        </div>
-        <div class="input-footer">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                <div class="input-footer">
           <small
             >NeethiAI can make mistakes. Consider checking important
             information.</small
@@ -175,35 +157,35 @@ block content %}
           >
             <i class="fas fa-volume-up"></i>
           </button>
-          <!-- Keep language toggle stop button only (handled by #stopTTS elsewhere) -->
+          <!-- Stop buttons removed per request -->
+                </div>
+            </div>
         </div>
-      </div>
     </div>
-  </div>
 </div>
 
 <style>
-  .chat-container {
+.chat-container {
     display: flex;
     height: 100vh;
     background: #343541;
     color: #ffffff;
-  }
+}
 
-  .sidebar {
+.sidebar {
     width: 260px;
     background: #202123;
     border-right: 1px solid #4d4d4f;
     display: flex;
     flex-direction: column;
-  }
+}
 
-  .sidebar-header {
+.sidebar-header {
     padding: 1rem;
     border-bottom: 1px solid #4d4d4f;
-  }
+}
 
-  .new-chat-btn {
+.new-chat-btn {
     width: 100%;
     padding: 0.75rem;
     background: transparent;
@@ -216,17 +198,17 @@ block content %}
     gap: 0.5rem;
     font-size: 14px;
     transition: background-color 0.2s;
-  }
+}
 
-  .new-chat-btn:hover {
+.new-chat-btn:hover {
     background: #2a2b32;
-  }
+}
 
-  .chat-history {
+.chat-history {
     flex: 1;
     overflow-y: auto;
     padding: 1rem;
-  }
+}
 
   .chat-item {
     padding: 0.75rem;
@@ -257,95 +239,95 @@ block content %}
     font-size: 12px;
   }
 
-  .main-chat {
+.main-chat {
     flex: 1;
     display: flex;
     flex-direction: column;
     background: #343541;
-  }
+}
 
-  .chat-header {
+.chat-header {
     padding: 2rem;
     text-align: center;
     border-bottom: 1px solid #4d4d4f;
-  }
+}
 
-  .chat-header h1 {
+.chat-header h1 {
     font-size: 2rem;
     margin: 0;
     color: #ffffff;
-  }
+}
 
-  .chat-header p {
+.chat-header p {
     margin: 0.5rem 0 0 0;
     color: #8e8ea0;
-  }
+}
 
-  .chat-messages {
+.chat-messages {
     flex: 1;
     overflow-y: auto;
     padding: 2rem;
     max-width: 768px;
     margin: 0 auto;
     width: 100%;
-  }
+}
 
-  .welcome-message {
+.welcome-message {
     margin-bottom: 2rem;
-  }
+}
 
-  .message {
+.message {
     margin-bottom: 1.5rem;
     display: flex;
     gap: 1rem;
-  }
+}
 
-  .message.user {
+.message.user {
     flex-direction: row-reverse;
-  }
+}
 
-  .message-content {
+.message-content {
     max-width: 70%;
     padding: 1rem 1.5rem;
     border-radius: 18px;
     line-height: 1.6;
-  }
+}
 
-  .message.assistant .message-content {
+.message.assistant .message-content {
     background: #444654;
     color: #ffffff;
-  }
+}
 
-  .message.user .message-content {
+.message.user .message-content {
     background: #10a37f;
     color: #ffffff;
-  }
+}
 
-  .message-content h3 {
+.message-content h3 {
     margin: 0 0 1rem 0;
     color: #ffffff;
-  }
+}
 
-  .message-content ul {
+.message-content ul {
     margin: 1rem 0;
     padding-left: 1.5rem;
-  }
+}
 
-  .message-content li {
+.message-content li {
     margin: 0.5rem 0;
-  }
+}
 
-  .chat-input-container {
+.chat-input-container {
     padding: 1rem 2rem 2rem;
     border-top: 1px solid #4d4d4f;
-  }
+}
 
-  .chat-input-wrapper {
+.chat-input-wrapper {
     max-width: 768px;
     margin: 0 auto;
-  }
+}
 
-  .input-group {
+.input-group {
     display: flex;
     align-items: flex-end;
     background: #40414f;
@@ -353,13 +335,13 @@ block content %}
     border-radius: 12px;
     padding: 0.75rem;
     gap: 0.5rem;
-  }
+}
 
-  .input-group:focus-within {
+.input-group:focus-within {
     border-color: #10a37f;
-  }
+}
 
-  #messageInput {
+#messageInput {
     flex: 1;
     background: transparent;
     border: none;
@@ -370,13 +352,13 @@ block content %}
     outline: none;
     min-height: 24px;
     max-height: 200px;
-  }
+}
 
-  #messageInput::placeholder {
+#messageInput::placeholder {
     color: #8e8ea0;
-  }
+}
 
-  #sendButton {
+#sendButton {
     background: #10a37f;
     border: none;
     color: #ffffff;
@@ -389,7 +371,7 @@ block content %}
     width: 32px;
     height: 32px;
     transition: background-color 0.2s;
-  }
+}
 
   #fileButton,
   #voiceButton {
@@ -418,44 +400,44 @@ block content %}
     animation: pulse 1.5s infinite;
   }
 
-  #sendButton:hover:not(:disabled) {
+#sendButton:hover:not(:disabled) {
     background: #0d8f6b;
-  }
+}
 
-  #sendButton:disabled {
+#sendButton:disabled {
     background: #565869;
     cursor: not-allowed;
-  }
+}
 
-  .input-footer {
+.input-footer {
     text-align: center;
     margin-top: 0.5rem;
-  }
+}
 
-  .input-footer small {
+.input-footer small {
     color: #8e8ea0;
     font-size: 12px;
-  }
+}
 
-  .loading {
+.loading {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     color: #8e8ea0;
-  }
+}
 
-  .loading-dots {
+.loading-dots {
     display: flex;
     gap: 4px;
-  }
+}
 
-  .loading-dot {
+.loading-dot {
     width: 4px;
     height: 4px;
     background: #8e8ea0;
     border-radius: 50%;
     animation: loading 1.4s infinite ease-in-out;
-  }
+}
 
   .loading-dot:nth-child(1) {
     animation-delay: -0.32s;
@@ -464,7 +446,7 @@ block content %}
     animation-delay: -0.16s;
   }
 
-  @keyframes loading {
+@keyframes loading {
     0%,
     80%,
     100% {
@@ -503,9 +485,9 @@ block content %}
     100% {
       box-shadow: 0 0 0 0 rgba(16, 163, 127, 0);
     }
-  }
+}
 
-  @media (max-width: 768px) {
+@media (max-width: 768px) {
     .sidebar {
       position: fixed;
       top: 0;
@@ -521,15 +503,15 @@ block content %}
     .sidebar.open {
       left: 0;
     }
-
+    
     .chat-messages {
-      padding: 1rem;
+        padding: 1rem;
       margin-left: 0;
       padding-bottom: 1rem;
     }
-
+    
     .chat-input-container {
-      padding: 1rem;
+        padding: 1rem;
       padding-bottom: 1rem;
     }
 
@@ -681,11 +663,11 @@ block content %}
     .sidebar-overlay.open {
       display: block;
     }
-  }
+}
 </style>
 
 <script>
-  let isLoading = false;
+let isLoading = false;
   let recognition = null;
   let isRecording = false;
   let lastResponse = "";
@@ -697,47 +679,47 @@ block content %}
   let preferredVoices = [];
   // E2EE removed
 
-  // Auto-resize textarea
+// Auto-resize textarea
   document
     .getElementById("messageInput")
     .addEventListener("input", function () {
       this.style.height = "auto";
       this.style.height = Math.min(this.scrollHeight, 200) + "px";
-
-      // Enable/disable send button
+    
+    // Enable/disable send button
       const sendButton = document.getElementById("sendButton");
-      sendButton.disabled = !this.value.trim() || isLoading;
-    });
+    sendButton.disabled = !this.value.trim() || isLoading;
+});
 
-  // Send message on Enter (but allow Shift+Enter for new line)
+// Send message on Enter (but allow Shift+Enter for new line)
   document
     .getElementById("messageInput")
     .addEventListener("keydown", function (e) {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         if (!isLoading && this.value.trim()) {
-          sendMessage();
+            sendMessage();
         }
-      }
-    });
+    }
+});
 
-  function sendMessage() {
+function sendMessage() {
     const input = document.getElementById("messageInput");
     const message = input.value.trim();
-
+    
     if (!message || isLoading) return;
-
+    
     // Add user message to chat (chatId will be added after API response)
     addMessage(message, "user");
-
+    
     // Clear input
     input.value = "";
     input.style.height = "auto";
     document.getElementById("sendButton").disabled = true;
-
+    
     // Show loading
     showLoading();
-
+    
     // Send plain text only
     return doChatRequest(message);
   }
@@ -746,7 +728,7 @@ block content %}
     // Send to API with conversation ID
     return fetch("/api/chat", {
       method: "POST",
-      headers: {
+        headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -768,6 +750,7 @@ block content %}
           // Auto-speak only fresh answers
           const plain = (data.answer || "").toString();
           if (plain.trim()) {
+            console.log("Auto-speaking response:", plain.substring(0, 100));
             speakMultilingual(plain.trim());
           }
           lastResponse = data.answer;
@@ -871,7 +854,7 @@ block content %}
         "background: #007bff; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;";
       editBtn.onclick = () => editMessage(chatId, content);
       actionDiv.appendChild(editBtn);
-      messageDiv.appendChild(contentDiv);
+    messageDiv.appendChild(contentDiv);
       messageDiv.appendChild(actionDiv);
     } else {
       messageDiv.appendChild(contentDiv);
@@ -888,7 +871,7 @@ block content %}
     }
 
     messagesContainer.appendChild(messageDiv);
-
+    
     // For user messages, scroll to bottom. For assistant messages, scroll to top of the message
     setTimeout(() => {
       if (sender === "user") {
@@ -928,11 +911,8 @@ block content %}
       if (/<[a-z][\s\S]*>/i.test(str)) {
         return str;
       }
-      if (window.marked) {
-        marked.setOptions({ breaks: true });
-        return marked.parse(str);
-      }
-      // Fallback: basic newline handling and simple bold/italics
+      
+      // Always use fallback for better compatibility
       return str
         .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
         .replace(/\*(.+?)\*/g, "<em>$1</em>")
@@ -940,15 +920,15 @@ block content %}
     } catch (e) {
       return (text || "").toString().replace(/\n/g, "<br>");
     }
-  }
+}
 
-  function showLoading() {
+function showLoading() {
     isLoading = true;
     const messagesContainer = document.getElementById("chatMessages");
     const loadingDiv = document.createElement("div");
     loadingDiv.className = "message assistant";
     loadingDiv.id = "loadingMessage";
-
+    
     loadingDiv.innerHTML = `
         <div class="message-content">
             <div class="loading">
@@ -961,7 +941,7 @@ block content %}
             </div>
         </div>
     `;
-
+    
     messagesContainer.appendChild(loadingDiv);
     // Scroll to top of loading message for better readability
     setTimeout(() => {
@@ -971,13 +951,13 @@ block content %}
         behavior: "smooth",
       });
     }, 100);
-  }
+}
 
-  function hideLoading() {
+function hideLoading() {
     isLoading = false;
     const loadingMessage = document.getElementById("loadingMessage");
     if (loadingMessage) {
-      loadingMessage.remove();
+        loadingMessage.remove();
     }
     document.getElementById("sendButton").disabled = false;
   }
@@ -1256,43 +1236,20 @@ block content %}
     if (voice) utter.voice = voice;
     utter.onstart = () => {
       ttsSpeaking = true;
-      const btn1 = document.getElementById("stopTTS");
-      if (btn1) btn1.style.display = "inline-block";
+      // Stop button removed
     };
     utter.onend = () => {
       ttsSpeaking = false;
-      const btn1 = document.getElementById("stopTTS");
-      if (btn1) btn1.style.display = "none";
+      // Stop button removed
     };
     utter.onerror = () => {
       ttsSpeaking = false;
-      const btn1 = document.getElementById("stopTTS");
-      if (btn1) btn1.style.display = "none";
+      // Stop button removed
     };
     window.speechSynthesis.speak(utter);
   }
 
-  function speakMultilingual(text) {
-    if (!("speechSynthesis" in window)) {
-      console.error("Speech synthesis not supported in this browser");
-      return;
-    }
-
-    // Check if we're on mobile and handle accordingly
-    const isMobile =
-      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-        navigator.userAgent,
-      );
-    if (isMobile) {
-      console.log("Mobile device detected, using mobile TTS");
-      speakMobileText(text);
-      return;
-    }
-
-    // For desktop, use the existing TTS system
-    console.log("Desktop TTS - using existing system");
-
-    function speakMobileText(text) {
+  function speakMobileText(text) {
       console.log("Starting mobile TTS for:", text.substring(0, 50) + "...");
 
       // Stop any current speech
@@ -1345,28 +1302,19 @@ block content %}
       utterance.onstart = () => {
         console.log("Mobile TTS started successfully");
         ttsSpeaking = true;
-        const btn1 = document.getElementById("stopTTS");
-        if (btn1) {
-          btn1.classList.add("speaking");
-        }
+        // Stop button removed
       };
 
       utterance.onend = () => {
         console.log("Mobile TTS ended successfully");
         ttsSpeaking = false;
-        const btn1 = document.getElementById("stopTTS");
-        if (btn1) {
-          btn1.classList.remove("speaking");
-        }
+        // Stop button removed
       };
 
       utterance.onerror = (event) => {
         console.error("Mobile TTS error:", event.error, event);
         ttsSpeaking = false;
-        const btn1 = document.getElementById("stopTTS");
-        if (btn1) {
-          btn1.classList.remove("speaking");
-        }
+        // Stop button removed
 
         // Try fallback with English if Tamil failed
         if (utterance.lang !== "en-US") {
@@ -1381,22 +1329,19 @@ block content %}
             fallbackUtterance.onstart = () => {
               console.log("Fallback English TTS started");
               ttsSpeaking = true;
-              const btn1 = document.getElementById("stopTTS");
-              if (btn1) btn1.classList.add("speaking");
+        // Stop button removed
             };
 
             fallbackUtterance.onend = () => {
               console.log("Fallback English TTS ended");
               ttsSpeaking = false;
-              const btn1 = document.getElementById("stopTTS");
-              if (btn1) btn1.classList.remove("speaking");
+        // Stop button removed
             };
 
             fallbackUtterance.onerror = (e) => {
               console.error("Fallback TTS also failed:", e);
               ttsSpeaking = false;
-              const btn1 = document.getElementById("stopTTS");
-              if (btn1) btn1.classList.remove("speaking");
+        // Stop button removed
             };
 
             try {
@@ -1408,10 +1353,38 @@ block content %}
         }
       };
 
-      // Speak the text
-      try {
-        window.speechSynthesis.speak(utterance);
-        console.log("Mobile TTS speak command sent");
+      // Ensure voices are ready before speaking
+      const ensureVoicesReady = () => {
+        return new Promise((resolve) => {
+          let attempts = 0;
+          const maxAttempts = 10;
+          const wait = () => {
+            const voices = window.speechSynthesis.getVoices();
+            if (voices && voices.length > 0) {
+              resolve(true);
+            } else if (attempts++ < maxAttempts) {
+              setTimeout(wait, 200);
+            } else {
+              resolve(false);
+            }
+          };
+          if (window.speechSynthesis.getVoices().length > 0) {
+            resolve(true);
+          } else {
+            try {
+              window.speechSynthesis.onvoiceschanged = () => resolve(true);
+            } catch (e) {
+              // Fallback to polling
+              wait();
+            }
+          }
+        });
+      };
+
+      const speakNow = () => {
+        try {
+          window.speechSynthesis.speak(utterance);
+          console.log("Mobile TTS speak command sent");
 
         // Multiple fallback attempts for better reliability
         let fallbackAttempts = 0;
@@ -1433,19 +1406,13 @@ block content %}
             fallbackUtterance.onstart = () => {
               console.log(`Fallback TTS ${fallbackAttempts} started`);
               ttsSpeaking = true;
-              const btn1 = document.getElementById("stopTTS");
-              const btn2 = document.getElementById("stopResponse");
-              if (btn1) btn1.classList.add("speaking");
-              if (btn2) btn2.classList.add("speaking");
+              // Stop buttons removed
             };
 
             fallbackUtterance.onend = () => {
               console.log(`Fallback TTS ${fallbackAttempts} ended`);
               ttsSpeaking = false;
-              const btn1 = document.getElementById("stopTTS");
-              const btn2 = document.getElementById("stopResponse");
-              if (btn1) btn1.classList.remove("speaking");
-              if (btn2) btn2.classList.remove("speaking");
+              // Stop buttons removed
             };
 
             fallbackUtterance.onerror = (e) => {
@@ -1473,7 +1440,30 @@ block content %}
       } catch (error) {
         console.error("Failed to start mobile TTS:", error);
       }
+    };
+
+    ensureVoicesReady().then(() => speakNow());
+  }
+
+  function speakMultilingual(text) {
+    if (!("speechSynthesis" in window)) {
+      console.error("Speech synthesis not supported in this browser");
+      return;
     }
+
+    // Check if we're on mobile and handle accordingly
+    const isMobile =
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent,
+      );
+    if (isMobile) {
+      console.log("Mobile device detected, using mobile TTS");
+      speakMobileText(text);
+      return;
+    }
+
+    // For desktop, use the existing TTS system
+    console.log("Desktop TTS - using existing system");
 
     console.log("Starting TTS for text:", text.substring(0, 100) + "...");
 
@@ -1540,33 +1530,54 @@ block content %}
         } catch (e) {}
       }
     }
-    const btn1 = document.getElementById("stopTTS");
-    const btn2 = document.getElementById("stopResponse");
+    // Stop buttons removed
     ttsSpeaking = true;
-    if (btn1) btn1.style.display = "inline-block";
-    if (btn2) btn2.style.display = "inline-block";
     for (let i = 0; i < queue.length; i++) {
       const u = queue[i];
       u.onend = () => {
         console.log("TTS utterance ended");
         if (i === queue.length - 1) {
           ttsSpeaking = false;
-          if (btn1) btn1.style.display = "none";
-          if (btn2) btn2.style.display = "none";
         }
       };
       u.onerror = (event) => {
         console.error("TTS error:", event.error, event);
         if (i === queue.length - 1) {
           ttsSpeaking = false;
-          if (btn1) btn1.style.display = "none";
-          if (btn2) btn2.style.display = "none";
         }
       };
       u.onstart = () => {
         console.log("TTS utterance started");
       };
-      window.speechSynthesis.speak(u);
+      // Ensure voices are ready before speaking each utterance
+      try {
+        const voicesReady = window.speechSynthesis.getVoices().length > 0;
+        if (voicesReady) {
+          window.speechSynthesis.speak(u);
+        } else {
+          const tryLater = () => {
+            if (window.speechSynthesis.getVoices().length > 0) {
+              window.speechSynthesis.speak(u);
+            } else {
+              setTimeout(tryLater, 150);
+            }
+          };
+          if (typeof window.speechSynthesis.onvoiceschanged !== "undefined") {
+            const once = () => {
+              window.speechSynthesis.onvoiceschanged = null;
+              window.speechSynthesis.speak(u);
+            };
+            window.speechSynthesis.onvoiceschanged = once;
+            setTimeout(tryLater, 300);
+          } else {
+            setTimeout(tryLater, 300);
+          }
+        }
+      } catch (e) {
+        try {
+          window.speechSynthesis.speak(u);
+        } catch (_) {}
+      }
     }
   }
 
@@ -1580,23 +1591,11 @@ block content %}
       console.error("Error cancelling speech:", e);
     }
     ttsSpeaking = false;
-    const btn1 = document.getElementById("stopTTS");
-    if (btn1) {
-      btn1.style.display = "none";
-      btn1.classList.remove("speaking");
-    }
-    const btn2 = document.getElementById("stopResponse");
-    if (btn2) {
-      btn2.style.display = "none";
-      btn2.classList.remove("speaking");
-    }
+    // Stop buttons removed
     console.log("Stop speaking completed");
   }
 
-  function stopTTS() {
-    console.log("Stop TTS called");
-    stopSpeaking();
-  }
+  // stopTTS function removed
 
   // Test voice functionality removed per request
 
@@ -1625,9 +1624,9 @@ block content %}
   function loadChat(chatId) {
     closeSidebar(); // Close mobile sidebar
     // ... existing loadChat code ...
-  }
+}
 
-  function startNewChat() {
+function startNewChat() {
     const messagesContainer = document.getElementById("chatMessages");
 
     // Reset state
@@ -1659,9 +1658,9 @@ block content %}
       top: 0,
       behavior: "smooth",
     });
-  }
+}
 
-  // Load chat history on page load
+// Load chat history on page load
   document.addEventListener("DOMContentLoaded", function () {
     // Load chat history if needed
     loadChatHistory();
@@ -1830,7 +1829,7 @@ block content %}
     fileInput.value = "";
   }
 
-  function loadChatHistory() {
+function loadChatHistory() {
     fetch("/api/chat/history")
       .then((response) => response.json())
       .then((data) => {
@@ -2199,6 +2198,6 @@ block content %}
         console.error("Error submitting feedback:", error);
         addMessage("❌ Error submitting feedback. Please try again.", "system");
       });
-  }
+}
 </script>
 {% endblock %}

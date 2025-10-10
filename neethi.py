@@ -647,12 +647,10 @@ def preprocess_image(image):
 def extract_text_easyocr(image):
     global reader
     try:
-        # Use unique temp directory to avoid file locks
-        import time
-
+        # Simple approach - use current directory for models
+        import os
         model_dir = os.path.join(os.getcwd(), "easyocr_models")
-        temp_dir = os.path.join(model_dir, f"temp_{int(time.time() * 1000)}")
-        os.makedirs(temp_dir, exist_ok=True)
+        os.makedirs(model_dir, exist_ok=True)
 
         # Detect GPU availability (CUDA) for EasyOCR
         gpu_available = False
@@ -685,7 +683,7 @@ def extract_text_easyocr(image):
             if not gpu_available:
                 print("Using English-only model for faster CPU processing")
                 reader = easyocr.Reader(
-                    ["en"], gpu=False, download_enabled=True, model_storage_directory=temp_dir
+                    ["en"], gpu=False, download_enabled=True, model_storage_directory=model_dir
                 )
                 print("EasyOCR initialized with English-only model (CPU optimized)")
             else:
@@ -695,7 +693,7 @@ def extract_text_easyocr(image):
                     ["en", "ta"],
                     gpu=gpu_available,
                     download_enabled=True,
-                    model_storage_directory=temp_dir,
+                    model_storage_directory=model_dir,
                 )
                 print("EasyOCR initialized successfully with multilingual model")
 
@@ -712,7 +710,7 @@ def extract_text_easyocr(image):
             print(f"Model initialization failed: {e}, falling back to English only")
             # Fallback to English only
             reader = easyocr.Reader(
-                ["en"], gpu=False, download_enabled=True, model_storage_directory=temp_dir
+                ["en"], gpu=False, download_enabled=True, model_storage_directory=model_dir
             )
             print("EasyOCR initialized with English-only model (fallback)")
         try:
@@ -720,19 +718,24 @@ def extract_text_easyocr(image):
         except Exception:
             # Reinitialize with English only and retry
             reader = easyocr.Reader(
-                ["en"], gpu=gpu_available, download_enabled=True, model_storage_directory=temp_dir
+                ["en"], gpu=gpu_available, download_enabled=True, model_storage_directory=model_dir
             )
             results = reader.readtext(image, detail=0, paragraph=True)
         text = "\n".join([r.strip() for r in results if isinstance(r, str)])
 
-        # Clean up temp directory
-        try:
-            import shutil
+        # No cleanup needed for model directory
+    except Exception as e:
+        app.logger.error(f"EasyOCR processing failed: {e}")
+        text = "OCR processing failed. Please try with a clearer image."
 
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        except:
-            pass
-
+        # If EasyOCR failed completely, try a simple fallback
+        if not text or len(text.strip()) < 3:
+            try:
+                # Simple fallback: return a message indicating OCR failed
+                return "Unable to extract text from image. Please ensure the image is clear and contains readable text."
+            except Exception:
+                return "OCR processing failed. Please try with a clearer image."
+        
         # Fallback to Tesseract if EasyOCR produced little/no text
         if (not text or len(text.strip()) < 6) and _has_tesseract:
             try:
@@ -748,8 +751,6 @@ def extract_text_easyocr(image):
             except Exception:
                 pass
         return text
-    except Exception as e:
-        raise Exception(f"Error extracting text from image: {str(e)}")
 
 
 def extract_text_paddle(image: np.ndarray) -> str:
@@ -1849,6 +1850,9 @@ def api_chat():
         if any(
             keyword in question.lower()
             for keyword in ["date", "time", "today", "current", "now", "what day", "what time"]
+        ) and not any(
+            keyword in question.lower()
+            for keyword in ["gst", "tax", "budget", "legal", "law", "section", "act", "court", "fine", "penalty"]
         ):
             # Get current time information
             times = get_current_times()
@@ -2585,22 +2589,34 @@ def detect_fake_notice_api():
             if image.mode != "RGB":
                 image = image.convert("RGB")
             np_img = np.array(image)
-            text = extract_text_easyocr(np_img)
+            try:
+                text = extract_text_easyocr(np_img)
+            except Exception as e:
+                app.logger.error(f"EasyOCR failed: {e}")
+                text = "OCR processing failed. Please try with a clearer image."
 
             # Enhanced mobile fallback - try multiple preprocessing techniques
             if not text or len(text.strip()) < 10:
                 app.logger.info("Trying enhanced preprocessing for mobile image")
                 # Try different preprocessing techniques
-                processed_image = preprocess_image(image)
-                text = extract_text_easyocr(processed_image)
+                try:
+                    processed_image = preprocess_image(image)
+                    text = extract_text_easyocr(processed_image)
+                except Exception as e:
+                    app.logger.error(f"Preprocessed OCR failed: {e}")
+                    text = "OCR processing failed. Please try with a clearer image."
 
                 # If still no text, try with different preprocessing
                 if not text or len(text.strip()) < 10:
                     # Convert to grayscale and enhance contrast
-                    gray = cv2.cvtColor(np_img, cv2.COLOR_RGB2GRAY)
-                    enhanced = cv2.equalizeHist(gray)
-                    enhanced_rgb = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2RGB)
-                    text = extract_text_easyocr(enhanced_rgb)
+                    try:
+                        gray = cv2.cvtColor(np_img, cv2.COLOR_RGB2GRAY)
+                        enhanced = cv2.equalizeHist(gray)
+                        enhanced_rgb = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2RGB)
+                        text = extract_text_easyocr(enhanced_rgb)
+                    except Exception as e:
+                        app.logger.error(f"Enhanced OCR failed: {e}")
+                        text = "OCR processing failed. Please try with a clearer image."
         elif file.filename and file.filename.lower().endswith(".pdf"):
             # Reuse the raw bytes for PDF parsing
             text = extract_text_from_pdf(io.BytesIO(raw_bytes))
