@@ -72,6 +72,15 @@ block content %}
               AUTO
             </button>
           </div>
+          <button
+            id="globalStopTTS"
+            class="btn btn-sm btn-danger"
+            onclick="stopSpeaking()"
+            style="display:none"
+            title="Stop speaking"
+          >
+            <i class="fas fa-stop"></i>
+          </button>
           <!-- Removed stop button and test voice button per request -->
         </div>
       </div>
@@ -237,7 +246,7 @@ block content %}
   .chat-date {
     color: #8e8ea0;
     font-size: 12px;
-  }
+}
 
 .main-chat {
     flex: 1;
@@ -398,7 +407,7 @@ block content %}
     background: #0d8f6b;
     box-shadow: 0 0 0 0 rgba(16, 163, 127, 0.7);
     animation: pulse 1.5s infinite;
-  }
+}
 
 #sendButton:hover:not(:disabled) {
     background: #0d8f6b;
@@ -901,6 +910,17 @@ function sendMessage() {
         if (plain.trim()) speakMultilingual(plain.trim());
       };
       messageDiv.appendChild(speakBtn);
+      
+      // Add stop speaking button (initially hidden)
+      const stopBtn = document.createElement("button");
+      stopBtn.innerHTML = '<i class="fas fa-stop"></i> Stop Speaking';
+      stopBtn.className = "btn btn-sm";
+      stopBtn.style.cssText =
+        "margin-top:6px; margin-left:4px; background:#dc3545; color:#fff; border:1px solid #dc3545; border-radius:4px; padding:3px 6px; display:none;";
+      stopBtn.onclick = () => {
+        stopSpeaking();
+      };
+      messageDiv.appendChild(stopBtn);
     }
   }
 
@@ -984,7 +1004,7 @@ function hideLoading() {
     if (!recognition) {
       recognition = new (window.SpeechRecognition ||
         window.webkitSpeechRecognition)();
-      recognition.continuous = false;
+      recognition.continuous = true; // keep listening until user stops
       recognition.interimResults = true;
       recognition.lang = forcedLanguage === "ta" ? "ta-IN" : "en-IN";
       recognition.onresult = function (event) {
@@ -999,6 +1019,11 @@ function hideLoading() {
         pumpWaveOnce();
       };
       recognition.onend = function () {
+        // If user didn't press stop, try to restart for continuous capture
+        if (isRecording) {
+          try { recognition.start(); } catch (e) {}
+          return;
+        }
         isRecording = false;
         document.getElementById("voiceButton").classList.remove("active");
         stopWave();
@@ -1302,19 +1327,22 @@ function hideLoading() {
       utterance.onstart = () => {
         console.log("Mobile TTS started successfully");
         ttsSpeaking = true;
-        // Stop button removed
+        const g = document.getElementById('globalStopTTS');
+        if (g) g.style.display = 'inline-block';
       };
 
       utterance.onend = () => {
         console.log("Mobile TTS ended successfully");
         ttsSpeaking = false;
-        // Stop button removed
+        const g = document.getElementById('globalStopTTS');
+        if (g) g.style.display = 'none';
       };
 
       utterance.onerror = (event) => {
         console.error("Mobile TTS error:", event.error, event);
         ttsSpeaking = false;
-        // Stop button removed
+        const g = document.getElementById('globalStopTTS');
+        if (g) g.style.display = 'none';
 
         // Try fallback with English if Tamil failed
         if (utterance.lang !== "en-US") {
@@ -1329,19 +1357,22 @@ function hideLoading() {
             fallbackUtterance.onstart = () => {
               console.log("Fallback English TTS started");
               ttsSpeaking = true;
-        // Stop button removed
+              const g = document.getElementById('globalStopTTS');
+              if (g) g.style.display = 'inline-block';
             };
 
             fallbackUtterance.onend = () => {
               console.log("Fallback English TTS ended");
               ttsSpeaking = false;
-        // Stop button removed
+              const g = document.getElementById('globalStopTTS');
+              if (g) g.style.display = 'none';
             };
 
             fallbackUtterance.onerror = (e) => {
               console.error("Fallback TTS also failed:", e);
               ttsSpeaking = false;
-        // Stop button removed
+              const g = document.getElementById('globalStopTTS');
+              if (g) g.style.display = 'none';
             };
 
             try {
@@ -1385,6 +1416,8 @@ function hideLoading() {
         try {
           window.speechSynthesis.speak(utterance);
           console.log("Mobile TTS speak command sent");
+          const g = document.getElementById('globalStopTTS');
+          if (g) g.style.display = 'inline-block';
 
         // Multiple fallback attempts for better reliability
         let fallbackAttempts = 0;
@@ -1530,7 +1563,12 @@ function hideLoading() {
         } catch (e) {}
       }
     }
-    // Stop buttons removed
+    // Show stop buttons and hide speak buttons
+    const stopButtons = document.querySelectorAll('button[onclick*="stopSpeaking"]');
+    const speakButtons = document.querySelectorAll('button[onclick*="speakMultilingual"]');
+    stopButtons.forEach(btn => btn.style.display = 'inline-block');
+    speakButtons.forEach(btn => btn.style.display = 'none');
+    
     ttsSpeaking = true;
     for (let i = 0; i < queue.length; i++) {
       const u = queue[i];
@@ -1538,12 +1576,18 @@ function hideLoading() {
         console.log("TTS utterance ended");
         if (i === queue.length - 1) {
           ttsSpeaking = false;
+          // Hide stop buttons and show speak buttons
+          stopButtons.forEach(btn => btn.style.display = 'none');
+          speakButtons.forEach(btn => btn.style.display = 'inline-block');
         }
       };
       u.onerror = (event) => {
         console.error("TTS error:", event.error, event);
         if (i === queue.length - 1) {
           ttsSpeaking = false;
+          // Hide stop buttons and show speak buttons
+          stopButtons.forEach(btn => btn.style.display = 'none');
+          speakButtons.forEach(btn => btn.style.display = 'inline-block');
         }
       };
       u.onstart = () => {
@@ -1591,7 +1635,13 @@ function hideLoading() {
       console.error("Error cancelling speech:", e);
     }
     ttsSpeaking = false;
-    // Stop buttons removed
+    
+    // Hide stop buttons and show speak buttons
+    const stopButtons = document.querySelectorAll('button[onclick*="stopSpeaking"]');
+    const speakButtons = document.querySelectorAll('button[onclick*="speakMultilingual"]');
+    stopButtons.forEach(btn => btn.style.display = 'none');
+    speakButtons.forEach(btn => btn.style.display = 'inline-block');
+    
     console.log("Stop speaking completed");
   }
 
