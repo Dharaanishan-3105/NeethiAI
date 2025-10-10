@@ -86,9 +86,7 @@ app.config["SECRET_KEY"] = os.getenv(
 )
 
 # Database configuration - use Render's DATABASE_URL if available
-database_url = os.getenv(
-    "postgresql://neethi_user:OOO2MrT8diKahlqR12mMmoqp0zQFBGvG@dpg-d32p7vmmcj7s739q9f4g-a.oregon-postgres.render.com/neethi_ai_e3pa"
-)
+database_url = os.getenv("DATABASE_URL")
 if database_url:
     # Render provides DATABASE_URL, use it directly
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
@@ -238,7 +236,7 @@ class VerificationFeedback(db.Model):
 # User loader for Flask-Login
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 
 # Make config available in templates
