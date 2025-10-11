@@ -1,18 +1,33 @@
+import sys
 from datetime import datetime, timedelta, timezone
 
-from authlib.integrations.flask_client import OAuth
-from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
-from flask_login import (
-    LoginManager,
-    UserMixin,
-    current_user,
-    login_required,
-    login_user,
-    logout_user,
-)
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.exceptions import RequestEntityTooLarge
-from werkzeug.security import check_password_hash, generate_password_hash
+# Import with error handling
+try:
+    from authlib.integrations.flask_client import OAuth
+    _has_authlib = True
+except ImportError as e:
+    print(f"Warning: authlib not available: {e}")
+    _has_authlib = False
+    OAuth = None
+
+try:
+    from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
+    from flask_login import (
+        LoginManager,
+        UserMixin,
+        current_user,
+        login_required,
+        login_user,
+        logout_user,
+    )
+    from flask_sqlalchemy import SQLAlchemy
+    from werkzeug.exceptions import RequestEntityTooLarge
+    from werkzeug.security import check_password_hash, generate_password_hash
+    _has_flask = True
+except ImportError as e:
+    print(f"Error: Flask dependencies not available: {e}")
+    _has_flask = False
+    sys.exit(1)
 
 try:
     from zoneinfo import ZoneInfo  # Python 3.9+
@@ -77,7 +92,12 @@ except Exception:
     _has_paddleocr = False
 
 # Initialize Flask app
-app = Flask(__name__)
+try:
+    app = Flask(__name__)
+    print("✓ Flask app initialized successfully")
+except Exception as e:
+    print(f"✗ Failed to initialize Flask app: {e}")
+    sys.exit(1)
 
 # Configuration
 app.config["SECRET_KEY"] = os.getenv(
@@ -110,59 +130,108 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_CONTENT_LENGTH", 10 * 1024 * 1024))
 
 # Initialize extensions
-db = SQLAlchemy(app)
-login_manager = LoginManager()
-login_manager.init_app(app)
-setattr(login_manager, "login_view", "login")
-setattr(login_manager, "login_message", "Please log in to access this page.")
+try:
+    db = SQLAlchemy(app)
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    setattr(login_manager, "login_view", "login")
+    setattr(login_manager, "login_message", "Please log in to access this page.")
+    print("✓ Database and login manager initialized successfully")
+except Exception as e:
+    print(f"✗ Failed to initialize database/login manager: {e}")
+    sys.exit(1)
 
 # Initialize OAuth
-oauth = OAuth(app)
-# Cast to Any to satisfy static type checker for OAuth client methods
-google = cast(
-    Any,
-    oauth.register(
-        name="google",
-        client_id=os.getenv(
-            "GOOGLE_CLIENT_ID",
-            "432400946341-nab0qpvs97uk7rge79kkniu7l71f1qc9.apps.googleusercontent.com",
-        ),
-        client_secret=os.getenv("GOOGLE_CLIENT_SECRET", "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"),
-        server_metadata_url="https://accounts.google.com/.well-known/openid_configuration",
-        client_kwargs={"scope": "openid email profile"},
-    ),
-)
+def init_oauth():
+    if not _has_authlib:
+        print("OAuth providers disabled - authlib not available")
+        return None, None, None, None
+    
+    try:
+        oauth = OAuth(app)
+        
+        # Only register OAuth providers if environment variables are properly set
+        google = None
+        github = None
+        linkedin = None
+        
+        # Google OAuth - only if properly configured
+        google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+        google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+        if google_client_id and google_client_secret and google_client_id != "your-google-client-id":
+            try:
+                google = cast(
+                    Any,
+                    oauth.register(
+                        name="google",
+                        client_id=google_client_id,
+                        client_secret=google_client_secret,
+                        server_metadata_url="https://accounts.google.com/.well-known/openid_configuration",
+                        client_kwargs={"scope": "openid email profile"},
+                    ),
+                )
+                print("✓ Google OAuth configured")
+            except Exception as e:
+                print(f"⚠️ Google OAuth configuration failed: {e}")
+        else:
+            print("⚠️ Google OAuth not configured - missing environment variables")
+        
+        # GitHub OAuth - only if properly configured
+        github_client_id = os.getenv("GITHUB_CLIENT_ID")
+        github_client_secret = os.getenv("GITHUB_CLIENT_SECRET")
+        if github_client_id and github_client_secret and github_client_id != "your-github-client-id":
+            try:
+                github = cast(
+                    Any,
+                    oauth.register(
+                        name="github",
+                        client_id=github_client_id,
+                        client_secret=github_client_secret,
+                        access_token_url="https://github.com/login/oauth/access_token",
+                        authorize_url="https://github.com/login/oauth/authorize",
+                        api_base_url="https://api.github.com/",
+                        client_kwargs={"scope": "read:user user:email"},
+                    ),
+                )
+                print("✓ GitHub OAuth configured")
+            except Exception as e:
+                print(f"⚠️ GitHub OAuth configuration failed: {e}")
+        else:
+            print("⚠️ GitHub OAuth not configured - missing environment variables")
+        
+        # LinkedIn OAuth - only if properly configured
+        linkedin_client_id = os.getenv("LINKEDIN_CLIENT_ID")
+        linkedin_client_secret = os.getenv("LINKEDIN_CLIENT_SECRET")
+        if linkedin_client_id and linkedin_client_secret and linkedin_client_id != "your-linkedin-client-id":
+            try:
+                linkedin = cast(
+                    Any,
+                    oauth.register(
+                        name="linkedin",
+                        client_id=linkedin_client_id,
+                        client_secret=linkedin_client_secret,
+                        access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
+                        authorize_url="https://www.linkedin.com/oauth/v2/authorization",
+                        api_base_url="https://api.linkedin.com/v2/",
+                        client_kwargs={
+                            "scope": "r_liteprofile r_emailaddress",
+                            "token_endpoint_auth_method": "client_secret_post",
+                        },
+                    ),
+                )
+                print("✓ LinkedIn OAuth configured")
+            except Exception as e:
+                print(f"⚠️ LinkedIn OAuth configuration failed: {e}")
+        else:
+            print("⚠️ LinkedIn OAuth not configured - missing environment variables")
+        
+        return oauth, google, github, linkedin
+        
+    except Exception as e:
+        print(f"⚠️ OAuth initialization failed: {e}")
+        return None, None, None, None
 
-# Optional: GitHub OAuth
-github = cast(
-    Any,
-    oauth.register(
-        name="github",
-        client_id=os.getenv("Ov23ct7JIcOsCqwD19bw"),
-        client_secret=os.getenv("6ed5a5948a8d221de9cd5065ed6048497dcd93c"),
-        access_token_url="https://github.com/login/oauth/access_token",
-        authorize_url="https://github.com/login/oauth/authorize",
-        api_base_url="https://api.github.com/",
-        client_kwargs={"scope": "read:user user:email"},
-    ),
-)
-
-# Optional: LinkedIn OAuth
-linkedin = cast(
-    Any,
-    oauth.register(
-        name="linkedin",
-        client_id=os.getenv("86cajthasv4l0w"),
-        client_secret=os.getenv("WPL_AP1.Zyho9Or5baFxpdnK.aQdahw=="),
-        access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
-        authorize_url="https://www.linkedin.com/oauth/v2/authorization",
-        api_base_url="https://api.linkedin.com/v2/",
-        client_kwargs={
-            "scope": "r_liteprofile r_emailaddress",
-            "token_endpoint_auth_method": "client_secret_post",
-        },
-    ),
-)
+oauth, google, github, linkedin = init_oauth()
 
 
 # Database Models
@@ -1463,9 +1532,23 @@ def enhanced_legal_query_with_gatekeeper(query, model, force_language=None):
 # Flask Routes
 @app.route("/")
 def index():
-    if current_user.is_authenticated:
-        return redirect(url_for("dashboard"))
-    return render_template("index.html")
+    try:
+        if current_user.is_authenticated:
+            return redirect(url_for("dashboard"))
+        return render_template("index.html")
+    except Exception as e:
+        # Fallback if there are any issues with authentication
+        return f"""
+        <html>
+        <head><title>NeethiAI</title></head>
+        <body>
+            <h1>NeethiAI - Legal AI Assistant</h1>
+            <p>Application is running. If you see this message, the basic server is working.</p>
+            <p>Status: {datetime.utcnow().isoformat()}</p>
+            <p><a href="/health">Health Check</a></p>
+        </body>
+        </html>
+        """
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -1518,6 +1601,11 @@ def register():
 # Google OAuth Routes
 @app.route("/login/google")
 def google_login():
+    # Check if OAuth is available
+    if not _has_authlib or not google:
+        flash("OAuth authentication is not available. Please use email/password login.")
+        return redirect(url_for("login"))
+    
     # Check if Google OAuth is properly configured
     if (
         os.getenv("GOOGLE_CLIENT_ID") == "your-google-client-id"
@@ -1539,6 +1627,11 @@ def google_login():
 # GitHub OAuth routes
 @app.route("/login/github")
 def github_login():
+    # Check if OAuth is available
+    if not _has_authlib or not github:
+        flash("OAuth authentication is not available. Please use email/password login.")
+        return redirect(url_for("login"))
+    
     if not os.getenv("GITHUB_CLIENT_ID") or not os.getenv("GITHUB_CLIENT_SECRET"):
         flash("GitHub OAuth is not configured. Please contact the administrator.")
         return redirect(url_for("login"))
@@ -1548,6 +1641,11 @@ def github_login():
 
 @app.route("/callback/github")
 def github_callback():
+    # Check if OAuth is available
+    if not _has_authlib or not github:
+        flash("OAuth authentication is not available.")
+        return redirect(url_for("login"))
+    
     try:
         token = github.authorize_access_token()
         user = github.get("user").json()
@@ -1577,6 +1675,11 @@ def github_callback():
 # LinkedIn OAuth routes
 @app.route("/login/linkedin")
 def linkedin_login():
+    # Check if OAuth is available
+    if not _has_authlib or not linkedin:
+        flash("OAuth authentication is not available. Please use email/password login.")
+        return redirect(url_for("login"))
+    
     if not os.getenv("LINKEDIN_CLIENT_ID") or not os.getenv("LINKEDIN_CLIENT_SECRET"):
         flash("LinkedIn OAuth is not configured. Please contact the administrator.")
         return redirect(url_for("login"))
@@ -1586,6 +1689,11 @@ def linkedin_login():
 
 @app.route("/callback/linkedin")
 def linkedin_callback():
+    # Check if OAuth is available
+    if not _has_authlib or not linkedin:
+        flash("OAuth authentication is not available.")
+        return redirect(url_for("login"))
+    
     try:
         token = linkedin.authorize_access_token()
         # Fetch profile and email
@@ -1624,6 +1732,11 @@ def linkedin_callback():
 
 @app.route("/callback/google")
 def google_callback():
+    # Check if OAuth is available
+    if not _has_authlib or not google:
+        flash("OAuth authentication is not available.")
+        return redirect(url_for("login"))
+    
     try:
         token = google.authorize_access_token()
         user_info = token.get("userinfo")
@@ -2362,13 +2475,32 @@ def export_chats():
 @app.route("/health")
 def health_check():
     """Health check endpoint for Render"""
-    return jsonify(
-        {
-            "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
-            "database": "connected" if os.getenv("DATABASE_URL") else "not_connected",
-        }
-    )
+    try:
+        # Test database connection
+        db_status = "connected"
+        try:
+            with app.app_context():
+                db.session.execute(db.text("SELECT 1"))
+        except Exception:
+            db_status = "not_connected"
+        
+        return jsonify(
+            {
+                "status": "healthy",
+                "timestamp": datetime.utcnow().isoformat(),
+                "database": db_status,
+                "flask": "running",
+                "version": "1.0.0"
+            }
+        )
+    except Exception as e:
+        return jsonify(
+            {
+                "status": "unhealthy",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        ), 500
 
 
 # --- Time utilities & endpoints ---
@@ -3045,32 +3177,53 @@ def search_handbook():
 
 # Initialize database and run app
 if __name__ == "__main__":
-    # Get port from environment variable (Render sets this)
-    port = int(os.getenv("PORT", 5000))
-
-    # Check if running in production
-    is_production = os.getenv("FLASK_ENV") == "production"
-
-    # Try to create database tables, but don't fail if database is not available
     try:
-        with app.app_context():
-            db.create_all()
-            print("Database tables created successfully")
-    except Exception as e:
-        print(f"Database connection failed: {e}")
-        if is_production:
-            print("Starting in production mode with limited functionality...")
-            print("Database will be available when connection is restored")
-        else:
-            print("Continuing in development mode without database...")
+        # Get port from environment variable (Render sets this)
+        port = int(os.getenv("PORT", 5000))
 
-    # Only run Flask dev server if not in production
-    # In production, Waitress will handle the server
-    if not is_production:
-        print("Starting NeethiAI Flask Application...")
-        print(f"Open your browser and go to: http://localhost:{port}")
-        # Run without auto-reloader to avoid upload interruptions
-        app.run(debug=False, host="0.0.0.0", port=port, use_reloader=False)
-    else:
-        print("NeethiAI configured for production deployment")
-        print("Application will be served by Waitress")
+        # Check if running in production
+        is_production = os.getenv("FLASK_ENV") == "production"
+        
+        print(f"Starting NeethiAI - Environment: {'Production' if is_production else 'Development'}")
+        print(f"Port: {port}")
+
+        # Try to create database tables, but don't fail if database is not available
+        try:
+            with app.app_context():
+                db.create_all()
+                print("✓ Database tables created successfully")
+        except Exception as e:
+            print(f"⚠️ Database connection failed: {e}")
+            if is_production:
+                print("Starting in production mode with limited functionality...")
+                print("Database will be available when connection is restored")
+            else:
+                print("Continuing in development mode without database...")
+
+        # Start the server
+        if is_production:
+            print("Starting NeethiAI in Production Mode...")
+            print(f"Binding to host: 0.0.0.0, port: {port}")
+            # Try to use Waitress for production
+            try:
+                from waitress import serve
+                print("✓ Using Waitress production server")
+                serve(app, host="0.0.0.0", port=port, threads=4)
+            except ImportError:
+                print("⚠️ Waitress not available, using Flask development server")
+                app.run(debug=False, host="0.0.0.0", port=port, use_reloader=False)
+            except Exception as e:
+                print(f"⚠️ Error starting Waitress: {e}")
+                print("Falling back to Flask development server...")
+                app.run(debug=False, host="0.0.0.0", port=port, use_reloader=False)
+        else:
+            print("Starting NeethiAI Flask Application...")
+            print(f"Open your browser and go to: http://localhost:{port}")
+            # Run without auto-reloader to avoid upload interruptions
+            app.run(debug=False, host="0.0.0.0", port=port, use_reloader=False)
+            
+    except Exception as e:
+        print(f"✗ Fatal error starting application: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
