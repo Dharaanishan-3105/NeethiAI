@@ -1,0 +1,8 @@
+# Minimal requirements for basic functionality
+Flask>=2.3.0,<3.0.0
+Flask-SQLAlchemy>=3.0.0,<4.0.0
+Flask-Login>=0.6.0,<1.0.0
+Werkzeug>=2.3.0,<3.0.0
+psycopg2-binary>=2.9.0,<3.0.0
+waitress>=3.0.0,<4.0.0
+python-dotenv>=1.0.0,<2.0.0

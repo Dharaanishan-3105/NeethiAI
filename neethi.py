@@ -41,45 +41,94 @@ import re
 from typing import Any, cast
 from urllib.parse import urlparse
 
-import docx
-import easyocr
-import google.generativeai as genai
-import PyPDF2
-import requests
-from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-from duckduckgo_search import DDGS
-from langdetect import detect
-from PIL import Image, ImageFile
+# Import with error handling for optional dependencies
+try:
+    import docx
+    _has_docx = True
+except ImportError as e:
+    print(f"Warning: python-docx not available: {e}")
+    _has_docx = False
+
+try:
+    import easyocr
+    _has_easyocr = True
+except ImportError as e:
+    print(f"Warning: easyocr not available: {e}")
+    _has_easyocr = False
+
+try:
+    import google.generativeai as genai
+    _has_gemini = True
+except ImportError as e:
+    print(f"Warning: google-generativeai not available: {e}")
+    _has_gemini = False
+
+try:
+    import PyPDF2
+    _has_pypdf2 = True
+except ImportError as e:
+    print(f"Warning: PyPDF2 not available: {e}")
+    _has_pypdf2 = False
+
+try:
+    import requests
+    from bs4 import BeautifulSoup
+    from duckduckgo_search import DDGS
+    from langdetect import detect
+    _has_web_deps = True
+except ImportError as e:
+    print(f"Warning: Web dependencies not available: {e}")
+    _has_web_deps = False
+
+try:
+    from dotenv import load_dotenv
+    _has_dotenv = True
+except ImportError as e:
+    print(f"Warning: python-dotenv not available: {e}")
+    _has_dotenv = False
+
+try:
+    from PIL import Image, ImageFile
+    _has_pil = True
+except ImportError as e:
+    print(f"Warning: Pillow not available: {e}")
+    _has_pil = False
 
 # Load environment variables
-load_dotenv()
+if _has_dotenv:
+    load_dotenv()
 # Pillow compatibility shim for deprecated resampling constants used by dependencies (e.g., EasyOCR)
-try:
-    # Pillow >= 10 removed these aliases; map to Resampling equivalents
-    if not hasattr(Image, "ANTIALIAS"):
-        setattr(Image, "ANTIALIAS", Image.Resampling.LANCZOS)
-    if not hasattr(Image, "BILINEAR"):
-        setattr(Image, "BILINEAR", Image.Resampling.BILINEAR)
-    if not hasattr(Image, "BICUBIC"):
-        setattr(Image, "BICUBIC", Image.Resampling.BICUBIC)
-except Exception:
-    pass
-try:
-    # Allow loading slightly corrupted/truncated images rather than erroring out
-    ImageFile.LOAD_TRUNCATED_IMAGES = True
-except Exception:
-    pass
+if _has_pil:
+    try:
+        # Pillow >= 10 removed these aliases; map to Resampling equivalents
+        if not hasattr(Image, "ANTIALIAS"):
+            setattr(Image, "ANTIALIAS", Image.Resampling.LANCZOS)
+        if not hasattr(Image, "BILINEAR"):
+            setattr(Image, "BILINEAR", Image.Resampling.BILINEAR)
+        if not hasattr(Image, "BICUBIC"):
+            setattr(Image, "BICUBIC", Image.Resampling.BICUBIC)
+    except Exception:
+        pass
+    try:
+        # Allow loading slightly corrupted/truncated images rather than erroring out
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+    except Exception:
+        pass
 try:
     import pytesseract
-
     _has_tesseract = True
 except Exception:
     _has_tesseract = False
+
 import io
 
-import cv2
-import numpy as np
+try:
+    import cv2
+    import numpy as np
+    _has_cv2 = True
+except ImportError as e:
+    print(f"Warning: OpenCV not available: {e}")
+    _has_cv2 = False
 
 # Encryption helpers removed
 
@@ -148,6 +197,9 @@ def init_oauth():
         return None, None, None, None
     
     try:
+        if OAuth is None:
+            print("OAuth class not available")
+            return None, None, None, None
         oauth = OAuth(app)
         
         # Only register OAuth providers if environment variables are properly set
